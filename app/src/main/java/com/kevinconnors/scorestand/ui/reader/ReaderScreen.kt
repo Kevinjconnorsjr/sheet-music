@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.HorizontalSplit
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -42,6 +43,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,6 +79,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kevinconnors.scorestand.data.ViewMode
+import com.kevinconnors.scorestand.ui.reader.markup.MarkupOverlay
+import com.kevinconnors.scorestand.ui.reader.markup.MarkupToolbar
+import com.kevinconnors.scorestand.ui.reader.markup.TextNoteDialog
+import com.kevinconnors.scorestand.ui.reader.markup.Tool
+import com.kevinconnors.scorestand.ui.reader.markup.textMarkup
 import com.kevinconnors.scorestand.ui.theme.ReaderBackground
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -118,6 +125,12 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     var controller by remember { mutableStateOf<PageController?>(null) }
     val register: (PageController?) -> Unit = { c -> controller = c }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
+    var annotating by rememberSaveable { mutableStateOf(false) }
+    val tools = vm.tools
+    val markup = loaded.markup
+    // Normal swiping/scrolling is off while a drawing tool is in use.
+    val drawing = annotating && tools.tool != Tool.PAN
+    var pendingText by remember { mutableStateOf<Triple<Int, Float, Float>?>(null) }
     var lastKnownPage by remember { mutableIntStateOf(loaded.initialPage) }
 
     // Vertical-scroll settings, kept for the session.
@@ -140,7 +153,7 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    BackHandler(onBack = onBack)
+    BackHandler { if (annotating) annotating = false else onBack() }
 
     Box(
         Modifier
@@ -156,36 +169,43 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
             }
             .focusRequester(focus)
             .focusable()
-            .pointerInput(Unit) {
+            .pointerInput(drawing) {
+                if (drawing) return@pointerInput
                 detectTapGestures { offset ->
                     val third = size.width / 3f
                     when {
                         offset.x < third -> goPrevious()
                         offset.x > third * 2 -> goNext()
-                        else -> chromeVisible = !chromeVisible
+                        else -> if (!annotating) chromeVisible = !chromeVisible
                     }
                 }
             },
     ) {
-        key(score.viewMode) {
+        val overlay: @Composable (Int) -> Unit = { page ->
+            MarkupOverlay(markup, tools, page, editing = annotating) { p, x, y -> pendingText = Triple(p, x, y) }
+        }
+        CompositionLocalProvider(LocalPageOverlay provides overlay) {
+          key(score.viewMode) {
             when (score.viewMode) {
-                ViewMode.SINGLE -> SinglePageView(renderer, lastKnownPage, register)
-                ViewMode.TWO_PAGE -> TwoPageView(renderer, lastKnownPage, register)
-                ViewMode.HALF_PAGE -> HalfPageView(renderer, lastKnownPage, register)
+                ViewMode.SINGLE -> SinglePageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing)
+                ViewMode.TWO_PAGE -> TwoPageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing)
+                ViewMode.HALF_PAGE -> HalfPageView(renderer, lastKnownPage, register, wholePagesOnly = annotating)
                 ViewMode.VERTICAL -> VerticalScrollView(
                     renderer = renderer,
                     initialPage = lastKnownPage,
                     register = register,
                     widthFraction = widthFraction,
-                    autoScroll = autoScroll,
+                    userScrollEnabled = !drawing,
+                    autoScroll = autoScroll && !annotating,
                     autoScrollDpPerSecond = autoSpeed,
                     onAutoScrollReachedEnd = { autoScroll = false },
                 )
             }
+          }
         }
 
         AnimatedVisibility(
-            visible = chromeVisible,
+            visible = chromeVisible || annotating,
             enter = fadeIn() + slideInVertically { -it },
             exit = fadeOut() + slideOutVertically { -it },
             modifier = Modifier.align(Alignment.TopCenter),
@@ -196,6 +216,8 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 composer = score.composer,
                 mode = score.viewMode,
                 onBack = onBack,
+                annotating = annotating,
+                onAnnotate = { annotating = true; autoScroll = false },
                 onMode = { mode ->
                     autoScroll = false
                     vm.setViewMode(mode, controller?.currentPage ?: lastKnownPage)
@@ -204,7 +226,24 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
         }
 
         AnimatedVisibility(
-            visible = chromeVisible,
+            visible = annotating,
+            enter = fadeIn() + slideInVertically { it },
+            exit = fadeOut() + slideOutVertically { it },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            MarkupToolbar(
+                session = markup,
+                settings = tools,
+                currentPage = controller?.currentPage ?: lastKnownPage,
+                pageCount = pageCount,
+                onPreviousPage = { goPrevious() },
+                onNextPage = { goNext() },
+                onDone = { annotating = false },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = chromeVisible && !annotating,
             enter = fadeIn() + slideInVertically { it },
             exit = fadeOut() + slideOutVertically { it },
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -223,6 +262,13 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
             )
         }
     }
+
+    pendingText?.let { (page, x, y) ->
+        TextNoteDialog(onDismiss = { pendingText = null }) { text ->
+            markup.add(textMarkup(markup, tools, page, x, y, text))
+            pendingText = null
+        }
+    }
 }
 
 @Composable
@@ -232,6 +278,8 @@ private fun TopChrome(
     composer: String,
     mode: ViewMode,
     onBack: () -> Unit,
+    annotating: Boolean,
+    onAnnotate: () -> Unit,
     onMode: (ViewMode) -> Unit,
 ) {
     var modeMenu by remember { mutableStateOf(false) }
@@ -253,6 +301,9 @@ private fun TopChrome(
             if (vm.inSetlist) {
                 IconButton(enabled = vm.hasPreviousPiece(), onClick = vm::previousPiece) { Icon(Icons.Outlined.SkipPrevious, "Previous piece") }
                 IconButton(enabled = vm.hasNextPiece(), onClick = vm::nextPiece) { Icon(Icons.Outlined.SkipNext, "Next piece") }
+            }
+            if (!annotating) {
+                IconButton(onClick = onAnnotate) { Icon(Icons.Outlined.Draw, "Mark up") }
             }
             Box {
                 IconButton(onClick = { modeMenu = true }) { Icon(mode.icon(), "Page layout") }

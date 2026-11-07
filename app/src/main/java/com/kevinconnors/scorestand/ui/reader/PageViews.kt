@@ -1,11 +1,12 @@
 package com.kevinconnors.scorestand.ui.reader
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,21 +36,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kevinconnors.scorestand.render.PageRenderer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlin.math.roundToInt
 
 /** Lets the reader chrome, tap zones and page-turn pedals drive whichever layout is showing. */
 interface PageController {
@@ -76,6 +76,9 @@ private fun rememberPageBitmap(renderer: PageRenderer, index: Int, widthPx: Int)
     return state
 }
 
+/** Content drawn on top of each page, sized exactly to it (used for markings). */
+val LocalPageOverlay = compositionLocalOf<(@Composable (page: Int) -> Unit)?> { null }
+
 /** A page image that fills its modifier's size (callers size it to the page's aspect ratio). */
 @Composable
 fun PageBitmap(renderer: PageRenderer, index: Int, modifier: Modifier) {
@@ -83,6 +86,7 @@ fun PageBitmap(renderer: PageRenderer, index: Int, modifier: Modifier) {
         val widthPx = if (constraints.hasBoundedWidth) constraints.maxWidth else 1080
         val image by rememberPageBitmap(renderer, index, widthPx)
         image?.let { Image(it, contentDescription = "Page ${index + 1}", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds) }
+        LocalPageOverlay.current?.invoke(index)
     }
 }
 
@@ -103,7 +107,7 @@ fun FittedPage(
 }
 
 @Composable
-fun SinglePageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit) {
+fun SinglePageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit, userScrollEnabled: Boolean) {
     val count = renderer.pageCount
     val state = rememberPagerState(initialPage.coerceIn(0, count - 1)) { count }
     val controller = remember(state) {
@@ -117,13 +121,13 @@ fun SinglePageView(renderer: PageRenderer, initialPage: Int, register: (PageCont
         }
     }
     RegisterController(controller, register)
-    HorizontalPager(state, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { it }) { page ->
+    HorizontalPager(state, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { it }, userScrollEnabled = userScrollEnabled) { page ->
         FittedPage(renderer, page, Modifier.fillMaxSize().padding(4.dp))
     }
 }
 
 @Composable
-fun TwoPageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit) {
+fun TwoPageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit, userScrollEnabled: Boolean) {
     val count = renderer.pageCount
     val spreads = (count + 1) / 2
     val state = rememberPagerState((initialPage / 2).coerceIn(0, spreads - 1)) { spreads }
@@ -138,7 +142,7 @@ fun TwoPageView(renderer: PageRenderer, initialPage: Int, register: (PageControl
         }
     }
     RegisterController(controller, register)
-    HorizontalPager(state, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { it }) { spread ->
+    HorizontalPager(state, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { it }, userScrollEnabled = userScrollEnabled) { spread ->
         val left = spread * 2
         val right = left + 1
         Row(Modifier.fillMaxSize().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -158,7 +162,7 @@ fun TwoPageView(renderer: PageRenderer, initialPage: Int, register: (PageControl
  * Positions run 0..2(n-1); even = a whole page, odd = top of page p+1 over bottom of page p.
  */
 @Composable
-fun HalfPageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit) {
+fun HalfPageView(renderer: PageRenderer, initialPage: Int, register: (PageController?) -> Unit, wholePagesOnly: Boolean) {
     val count = renderer.pageCount
     val maxPos = (count - 1) * 2
     var pos by remember { mutableIntStateOf((initialPage * 2).coerceIn(0, maxPos)) }
@@ -173,27 +177,25 @@ fun HalfPageView(renderer: PageRenderer, initialPage: Int, register: (PageContro
     RegisterController(controller, register)
 
     val page = pos / 2
-    if (pos % 2 == 0) {
+    // While marking up, show whole pages so every mark lands on a definite page.
+    if (pos % 2 == 0 || wholePagesOnly) {
         FittedPage(renderer, page, Modifier.fillMaxSize().padding(4.dp))
     } else {
         BoxWithConstraints(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
             val ratio = renderer.aspectRatio(page)
             val boxRatio = maxWidth / maxHeight
             val (w, h) = if (ratio > boxRatio) maxWidth to maxWidth / ratio else maxHeight * ratio to maxHeight
-            val widthPx = with(LocalDensity.current) { w.roundToPx() }
-            val top by rememberPageBitmap(renderer, page + 1, widthPx)
-            val bottom by rememberPageBitmap(renderer, page, widthPx)
-            Canvas(Modifier.size(w, h).background(Color.White)) {
-                val dstW = size.width.roundToInt()
-                val half = (size.height / 2).roundToInt()
-                top?.let {
-                    drawImage(it, IntOffset.Zero, IntSize(it.width, it.height / 2), IntOffset.Zero, IntSize(dstW, half))
+            Box(Modifier.size(w, h)) {
+                Column(Modifier.fillMaxSize()) {
+                    // Top half: the next page. Each half shows a full-size page, clipped.
+                    Box(Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
+                        PageBitmap(renderer, page + 1, Modifier.wrapContentHeight(Alignment.Top, unbounded = true).size(w, h))
+                    }
+                    Box(Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
+                        PageBitmap(renderer, page, Modifier.wrapContentHeight(Alignment.Bottom, unbounded = true).size(w, h))
+                    }
                 }
-                bottom?.let {
-                    val srcTop = it.height / 2
-                    drawImage(it, IntOffset(0, srcTop), IntSize(it.width, it.height - srcTop), IntOffset(0, half), IntSize(dstW, size.height.roundToInt() - half))
-                }
-                drawLine(Color(0xFF1E3A5F), Offset(0f, half.toFloat()), Offset(size.width, half.toFloat()), strokeWidth = 3.dp.toPx())
+                HorizontalDivider(Modifier.align(Alignment.Center), thickness = 3.dp, color = Color(0xFF1E3A5F))
             }
         }
     }
@@ -209,6 +211,7 @@ fun VerticalScrollView(
     initialPage: Int,
     register: (PageController?) -> Unit,
     widthFraction: Float,
+    userScrollEnabled: Boolean,
     autoScroll: Boolean,
     autoScrollDpPerSecond: Float,
     onAutoScrollReachedEnd: () -> Unit,
@@ -271,6 +274,7 @@ fun VerticalScrollView(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().onSizeChanged { viewportHeight = it.height },
+        userScrollEnabled = userScrollEnabled,
         contentPadding = PaddingValues(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

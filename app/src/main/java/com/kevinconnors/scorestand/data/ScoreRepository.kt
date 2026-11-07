@@ -16,6 +16,7 @@ import java.util.UUID
 class ScoreRepository(private val context: Context, db: AppDatabase) {
     val scoreDao = db.scoreDao()
     val setlistDao = db.setlistDao()
+    val markupDao = db.markupDao()
 
     private val scoresDir = File(context.filesDir, "scores").apply { mkdirs() }
     private val thumbsDir = File(context.filesDir, "thumbs").apply { mkdirs() }

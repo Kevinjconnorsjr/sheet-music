@@ -13,6 +13,8 @@ import com.kevinconnors.scorestand.data.SetlistItem
 import com.kevinconnors.scorestand.data.ViewMode
 import com.kevinconnors.scorestand.render.PageRenderer
 import com.kevinconnors.scorestand.render.PageSources
+import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
+import com.kevinconnors.scorestand.ui.reader.markup.ToolSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -26,7 +28,10 @@ class ReaderViewModel(
 ) : AndroidViewModel(app) {
     private val repo = (app as ScoreStandApp).repository
 
-    data class Loaded(val score: Score, val renderer: PageRenderer, val initialPage: Int)
+    data class Loaded(val score: Score, val renderer: PageRenderer, val initialPage: Int, val markup: MarkupSession)
+
+    /** Markup tool choices survive moving between pieces. */
+    val tools = ToolSettings()
 
     var loaded by mutableStateOf<Loaded?>(null)
         private set
@@ -64,9 +69,10 @@ class ReaderViewModel(
             val renderer = withContext(Dispatchers.IO) {
                 PageRenderer(PageSources.open(repo.fileFor(score), score.mimeType))
             }
+            val markup = MarkupSession(repo.markupDao, score.id, viewModelScope).apply { load() }
             val previous = loaded
             val start = if (fromStart) 0 else score.lastPage.coerceIn(0, renderer.pageCount - 1)
-            loaded = Loaded(score, renderer, start)
+            loaded = Loaded(score, renderer, start, markup)
             error = null
             previous?.renderer?.close()
             repo.scoreDao.markOpened(id, System.currentTimeMillis())
