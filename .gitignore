@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Signing key: kept out of the repo; CI gets it from the SIGNING_KEYSTORE_BASE64 secret
+/app/signing/
+*.jks
+*.keystore
