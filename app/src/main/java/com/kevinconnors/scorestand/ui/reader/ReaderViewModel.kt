@@ -13,6 +13,7 @@ import com.kevinconnors.scorestand.data.SetlistItem
 import com.kevinconnors.scorestand.data.ViewMode
 import com.kevinconnors.scorestand.render.PageRenderer
 import com.kevinconnors.scorestand.render.PageSources
+import com.kevinconnors.scorestand.ui.reader.audio.AudioController
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.reader.markup.ToolSettings
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,9 @@ class ReaderViewModel(
 
     /** Markup tool choices survive moving between pieces. */
     val tools = ToolSettings()
+
+    /** One player for the whole reader session; it switches tracks as pieces change. */
+    val audio = AudioController(app, repo, viewModelScope)
 
     var loaded by mutableStateOf<Loaded?>(null)
         private set
@@ -73,6 +77,7 @@ class ReaderViewModel(
             val previous = loaded
             val start = if (fromStart) 0 else score.lastPage.coerceIn(0, renderer.pageCount - 1)
             loaded = Loaded(score, renderer, start, markup)
+            audio.openScore(score.id)
             error = null
             previous?.renderer?.close()
             repo.scoreDao.markOpened(id, System.currentTimeMillis())
@@ -108,6 +113,7 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
+        audio.release()
         loaded?.renderer?.close()
     }
 }

@@ -1,7 +1,10 @@
 package com.kevinconnors.scorestand.ui.reader
 
 import android.app.Activity
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,6 +29,8 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Draw
+import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.outlined.HorizontalSplit
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -68,6 +73,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,6 +85,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kevinconnors.scorestand.data.ViewMode
+import com.kevinconnors.scorestand.ui.reader.audio.AudioPanel
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupOverlay
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupToolbar
 import com.kevinconnors.scorestand.ui.reader.markup.TextNoteDialog
@@ -131,6 +138,12 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     // Normal swiping/scrolling is off while a drawing tool is in use.
     val drawing = annotating && tools.tool != Tool.PAN
     var pendingText by remember { mutableStateOf<Triple<Int, Float, Float>?>(null) }
+    val audio = vm.audio
+    var showAudio by rememberSaveable { mutableStateOf(false) }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { audio.importTrack(it); showAudio = true }
+    }
+    val context = LocalContext.current
     var lastKnownPage by remember { mutableIntStateOf(loaded.initialPage) }
 
     // Vertical-scroll settings, kept for the session.
@@ -145,6 +158,15 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
             lastKnownPage = it
             vm.saveProgress(it)
         }
+    }
+
+    // Markers linked to pages turn the music as the recording plays.
+    LaunchedEffect(controller) {
+        val c = controller ?: return@LaunchedEffect
+        audio.pageRequests.collect { page -> if (page < pageCount && page != c.currentPage) c.jumpTo(page) }
+    }
+    LaunchedEffect(Unit) {
+        audio.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
     fun goNext() = scope.launch { if (controller?.next() == false) vm.nextPiece() }
@@ -164,6 +186,7 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 when (e.key) {
                     Key.PageDown, Key.DirectionRight, Key.DirectionDown, Key.Spacebar, Key.Enter, Key.NumPadEnter -> { goNext(); true }
                     Key.PageUp, Key.DirectionLeft, Key.DirectionUp -> { goPrevious(); true }
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> { audio.togglePlay(); true }
                     else -> false
                 }
             }
@@ -218,6 +241,8 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 onBack = onBack,
                 annotating = annotating,
                 onAnnotate = { annotating = true; autoScroll = false },
+                audioOpen = showAudio,
+                onToggleAudio = { showAudio = !showAudio },
                 onMode = { mode ->
                     autoScroll = false
                     vm.setViewMode(mode, controller?.currentPage ?: lastKnownPage)
@@ -242,12 +267,25 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
             )
         }
 
-        AnimatedVisibility(
-            visible = chromeVisible && !annotating,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()) {
+            // The audio panel stays up while the toolbars are hidden, so you can play along full-screen.
+            AnimatedVisibility(
+                visible = showAudio && !annotating,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+            ) {
+                AudioPanel(
+                    audio = audio,
+                    currentPage = controller?.currentPage ?: lastKnownPage,
+                    onAddTrack = { audioPicker.launch(arrayOf("audio/*")) },
+                    onClose = { showAudio = false },
+                )
+            }
+            AnimatedVisibility(
+                visible = chromeVisible && !annotating,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+            ) {
             BottomChrome(
                 page = controller?.currentPage ?: lastKnownPage,
                 pageCount = pageCount,
@@ -260,6 +298,7 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 widthFraction = widthFraction,
                 onWidthFraction = { widthFraction = it },
             )
+        }
         }
     }
 
@@ -280,6 +319,8 @@ private fun TopChrome(
     onBack: () -> Unit,
     annotating: Boolean,
     onAnnotate: () -> Unit,
+    audioOpen: Boolean,
+    onToggleAudio: () -> Unit,
     onMode: (ViewMode) -> Unit,
 ) {
     var modeMenu by remember { mutableStateOf(false) }
@@ -303,6 +344,9 @@ private fun TopChrome(
                 IconButton(enabled = vm.hasNextPiece(), onClick = vm::nextPiece) { Icon(Icons.Outlined.SkipNext, "Next piece") }
             }
             if (!annotating) {
+                IconButton(onClick = onToggleAudio) {
+                    Icon(if (audioOpen) Icons.Filled.Headphones else Icons.Outlined.Headphones, if (audioOpen) "Hide audio" else "Audio tracks")
+                }
                 IconButton(onClick = onAnnotate) { Icon(Icons.Outlined.Draw, "Mark up") }
             }
             Box {
@@ -336,7 +380,7 @@ private fun BottomChrome(
     onWidthFraction: (Float) -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), tonalElevation = 3.dp) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
             if (vertical) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalIconButton(onClick = onToggleAutoScroll) {

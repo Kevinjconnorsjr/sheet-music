@@ -55,6 +55,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.common)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
