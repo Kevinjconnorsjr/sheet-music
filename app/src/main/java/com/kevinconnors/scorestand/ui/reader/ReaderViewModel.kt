@@ -16,6 +16,7 @@ import com.kevinconnors.scorestand.render.PageSources
 import com.kevinconnors.scorestand.ui.reader.audio.AudioController
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.reader.markup.ToolSettings
+import com.kevinconnors.scorestand.practice.PianoSynth
 import com.kevinconnors.scorestand.ui.tools.MetronomeController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -139,6 +140,15 @@ class ReaderViewModel(
         viewModelScope.launch { repo.scoreDao.updateLastPage(l.score.id, page) }
     }
 
+    fun setTrimMargins(trim: Boolean, currentPage: Int) {
+        val l = loaded ?: return
+        loaded = l.copy(score = l.score.copy(trimMargins = trim), initialPage = currentPage)
+        viewModelScope.launch { repo.scoreDao.updateTrimMargins(l.score.id, trim) }
+    }
+
+    /** On-screen keyboard sound; runs only while the keyboard is open. */
+    val piano = PianoSynth()
+
     fun setViewMode(mode: ViewMode, currentPage: Int) {
         val l = loaded ?: return
         loaded = l.copy(score = l.score.copy(viewMode = mode), initialPage = currentPage)
@@ -148,6 +158,7 @@ class ReaderViewModel(
     override fun onCleared() {
         audio.release()
         metronome.stop()
+        piano.stop()
         loaded?.renderer?.close()
     }
 }

@@ -32,6 +32,12 @@ import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Crop
+import androidx.compose.material.icons.outlined.Piano
+import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.foundation.layout.size
@@ -98,6 +104,7 @@ import com.kevinconnors.scorestand.ui.reader.markup.LinkLabelDialog
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupOverlay
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.tools.MetronomeIcon
+import com.kevinconnors.scorestand.ui.tools.KeyboardPanel
 import com.kevinconnors.scorestand.ui.tools.MetronomePanel
 import com.kevinconnors.scorestand.ui.tools.TunerDialog
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupToolbar
@@ -158,6 +165,16 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     }
     val context = LocalContext.current
     var showMetronome by rememberSaveable { mutableStateOf(false) }
+    var showKeyboard by rememberSaveable { mutableStateOf(false) }
+    if (showKeyboard) {
+        DisposableEffect(Unit) {
+            vm.piano.start()
+            onDispose { vm.piano.stop() }
+        }
+    }
+    // Two-finger zoom, kept while turning pages; reset when the layout changes.
+    val zoom = remember { ZoomState() }
+    LaunchedEffect(score.viewMode) { zoom.reset() }
     var showTuner by rememberSaveable { mutableStateOf(false) }
     // Jump links: where a followed link came from (for the "back" chip), a destination being
     // labelled, and a link the user asked to delete.
@@ -242,11 +259,32 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 },
             )
         }
-        CompositionLocalProvider(LocalPageOverlay provides overlay) {
+        val paged = score.viewMode != ViewMode.VERTICAL
+        Box(
+            Modifier.fillMaxSize()
+                .onSizeChanged { zoom.size = it }
+                .clipToBounds()
+                .zoomGestures(
+                    state = zoom,
+                    singleFinger = when {
+                        drawing -> SingleFingerPan.NONE
+                        paged -> SingleFingerPan.BOTH
+                        else -> SingleFingerPan.HORIZONTAL
+                    },
+                    onScroll = { dy -> controller?.scrollBy(dy) },
+                    onSwipePage = { forward -> if (paged) { if (forward) goNext() else goPrevious() } },
+                ),
+        ) {
+        CompositionLocalProvider(
+            LocalPageOverlay provides overlay,
+            LocalTrimMargins provides score.trimMargins,
+            LocalRenderScale provides zoom.settledScale,
+        ) {
           key(score.viewMode) {
+            Box(Modifier.fillMaxSize().zoomed(zoom)) {
             when (score.viewMode) {
-                ViewMode.SINGLE -> SinglePageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing)
-                ViewMode.TWO_PAGE -> TwoPageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing)
+                ViewMode.SINGLE -> SinglePageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing && !zoom.isZoomed)
+                ViewMode.TWO_PAGE -> TwoPageView(renderer, lastKnownPage, register, userScrollEnabled = !drawing && !zoom.isZoomed)
                 ViewMode.HALF_PAGE -> HalfPageView(renderer, lastKnownPage, register, wholePagesOnly = annotating)
                 ViewMode.VERTICAL -> VerticalScrollView(
                     renderer = renderer,
@@ -259,7 +297,22 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                     onAutoScrollReachedEnd = { autoScroll = false },
                 )
             }
+            }
           }
+        }
+        }
+
+        // While zoomed in: how far, and a quick way back to the whole page.
+        if (zoom.isZoomed) {
+            androidx.compose.material3.AssistChip(
+                onClick = { zoom.reset() },
+                label = { Text("${(zoom.scale * 100).toInt()}%") },
+                leadingIcon = { Icon(Icons.Outlined.ZoomOut, null) },
+                trailingIcon = { Icon(Icons.Outlined.Close, "Reset zoom", Modifier.size(18.dp)) },
+                colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
+                    .padding(top = if (chromeVisible || annotating) 64.dp else 12.dp, end = 12.dp),
+            )
         }
 
         AnimatedVisibility(
@@ -279,6 +332,9 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 audioOpen = showAudio,
                 onToggleAudio = { showAudio = !showAudio },
                 onMetronome = { showMetronome = true },
+                onKeyboard = { showKeyboard = true },
+                trimMargins = score.trimMargins,
+                onTrimMargins = { vm.setTrimMargins(it, controller?.currentPage ?: lastKnownPage) },
                 onTuner = { showTuner = true },
                 exporting = vm.exporting,
                 onExport = {
@@ -336,6 +392,13 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 exit = fadeOut() + slideOutVertically { it },
             ) {
                 MetronomePanel(vm.metronome, onClose = { showMetronome = false })
+            }
+            AnimatedVisibility(
+                visible = showKeyboard && !annotating,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+            ) {
+                KeyboardPanel(vm.piano, onClose = { showKeyboard = false })
             }
             // The audio panel stays up while the toolbars are hidden, so you can play along full-screen.
             AnimatedVisibility(
@@ -408,6 +471,9 @@ private fun TopChrome(
     onToggleAudio: () -> Unit,
     onMetronome: () -> Unit,
     onTuner: () -> Unit,
+    onKeyboard: () -> Unit,
+    trimMargins: Boolean,
+    onTrimMargins: (Boolean) -> Unit,
     exporting: Boolean,
     onExport: () -> Unit,
     onMode: (ViewMode) -> Unit,
@@ -450,6 +516,13 @@ private fun TopChrome(
                             onClick = { modeMenu = false; if (m != mode) onMode(m) },
                         )
                     }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Trim margins") },
+                        leadingIcon = { Icon(Icons.Outlined.Crop, null) },
+                        trailingIcon = { if (trimMargins) Icon(Icons.Outlined.Check, null) },
+                        onClick = { modeMenu = false; onTrimMargins(!trimMargins) },
+                    )
                 }
             }
             if (!annotating) {
@@ -459,6 +532,7 @@ private fun TopChrome(
                     }
                     DropdownMenu(moreMenu, { moreMenu = false }) {
                         DropdownMenuItem(text = { Text("Metronome") }, leadingIcon = { Icon(MetronomeIcon, null) }, onClick = { moreMenu = false; onMetronome() })
+                        DropdownMenuItem(text = { Text("Keyboard") }, leadingIcon = { Icon(Icons.Outlined.Piano, null) }, onClick = { moreMenu = false; onKeyboard() })
                         DropdownMenuItem(text = { Text("Tuner") }, leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) }, onClick = { moreMenu = false; onTuner() })
                         DropdownMenuItem(
                             text = { Text("Share as PDF (with markings)") }, enabled = !exporting,

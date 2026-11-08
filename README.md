@@ -34,6 +34,11 @@ and practise along with attached audio tracks.
   - **Continuous vertical scroll** — all pages in one strip, with **auto-scroll**
     (adjustable speed) and an adjustable page width. Touching the screen pauses
     auto-scroll briefly.
+- **Pinch with two fingers to zoom** (up to 400%) in any layout; zoomed pages re-render sharply.
+  Two-finger drags pan, scroll the music (continuous mode) or turn the page (paged layouts).
+  While zoomed, one finger pans; tap the % chip to return to the whole page
+- **Trim margins** (layout menu): crops the white space around each page so the music fills
+  the screen width
 - Tap the left third of the screen to go back, the right third to go forward, and the middle to
   show or hide the toolbars (hiding them goes full-screen)
 - Bluetooth page-turn pedals and keyboards: Page Down / → / ↓ / Space / Enter = forward;
@@ -49,7 +54,7 @@ and practise along with attached audio tracks.
 - **Layers**: keep separate sets of markings (e.g. "My markings", "Conductor", "Lesson"),
   show/hide each one, choose which one new marks go on
 - Undo/redo, clear page, ◀ ▶ page buttons while drawing (pedals work too)
-- A second finger cancels the current stroke, so resting your palm or pinching doesn't leave marks
+- One finger draws; **two fingers always move, zoom or shrink the music** (and never leave a mark)
 - Marks are stored separately from the PDF (the original file is never changed) and scale with
   the page in every layout. Half-page mode shows whole pages while you're marking up.
 
@@ -80,6 +85,10 @@ and practise along with attached audio tracks.
 - 30–300 BPM with slider, ±1 buttons, presets and **tap tempo**; tempo names (Adagio, Allegro…)
 - 1–12 beats per bar with an accented first beat and beat lights
 - Sample-accurate clicks that don't drift; tempo and beats are remembered per piece
+
+**Keyboard** (⋮ → Keyboard in the reader)
+- Piano keyboard sized to your screen; play chords with several fingers or slide for a glissando
+- Octave arrows, sustain pedal, and optional note names on every key
 
 **Tuner** (⋮ → Tuner in the reader or the library)
 - Chromatic tuner with note name, octave, frequency and a ±50 cent meter (green when within 5¢)

@@ -33,6 +33,8 @@ data class Score(
     /** Metronome tempo remembered for this piece; 0 = not set yet. */
     @ColumnInfo(defaultValue = "0") val metronomeBpm: Int = 0,
     @ColumnInfo(defaultValue = "4") val beatsPerBar: Int = 4,
+    /** Crop the white margins so the music fills more of the screen. */
+    @ColumnInfo(defaultValue = "0") val trimMargins: Boolean = false,
 ) {
     fun tagList(): List<String> = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 }

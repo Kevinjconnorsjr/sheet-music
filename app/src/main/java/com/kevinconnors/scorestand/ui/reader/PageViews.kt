@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +48,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.kevinconnors.scorestand.render.ContentBox
 import com.kevinconnors.scorestand.render.PageRenderer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -59,6 +63,9 @@ interface PageController {
 
     /** Jumps to a spot on a page ([yUnits] in page-width units). Paged layouts just show the page. */
     suspend fun jumpTo(page: Int, yUnits: Float) = jumpTo(page)
+
+    /** Scrolls continuous layouts by [px] (positive = further into the music). Paged layouts ignore it. */
+    fun scrollBy(px: Float) {}
 }
 
 @Composable
@@ -82,11 +89,62 @@ private fun rememberPageBitmap(renderer: PageRenderer, index: Int, widthPx: Int)
 /** Content drawn on top of each page, sized exactly to it (used for markings). */
 val LocalPageOverlay = compositionLocalOf<(@Composable (page: Int) -> Unit)?> { null }
 
+/** Whether page margins are cropped away. */
+val LocalTrimMargins = compositionLocalOf { false }
+
+/** Settled pinch-zoom factor, so zoomed pages are rendered sharply rather than stretched. */
+val LocalRenderScale = compositionLocalOf { 1f }
+
+/** The part of the page to show: the content box when trimming, else the whole page. */
+@Composable
+fun rememberVisibleBox(renderer: PageRenderer, index: Int): ContentBox {
+    val trim = LocalTrimMargins.current
+    val box by produceVisibleBox(renderer, index, trim)
+    return box
+}
+
+@Composable
+private fun produceVisibleBox(renderer: PageRenderer, index: Int, trim: Boolean): State<ContentBox> {
+    val state = remember(renderer, index, trim) {
+        mutableStateOf(if (trim) renderer.cachedContentBounds(index) ?: ContentBox.FULL else ContentBox.FULL)
+    }
+    LaunchedEffect(renderer, index, trim) {
+        if (trim) state.value = renderer.contentBounds(index)
+    }
+    return state
+}
+
+/** Aspect ratio of what's shown of the page (after trimming). */
+fun PageRenderer.visibleRatio(index: Int, box: ContentBox) = aspectRatio(index) * box.width / box.height
+
+/**
+ * Shows the [box] region of a page, filling this composable's size. The whole page (with its
+ * markings overlay) is laid out larger and clipped, so marks keep their page coordinates.
+ */
+@Composable
+fun VisiblePage(renderer: PageRenderer, index: Int, box: ContentBox, modifier: Modifier) {
+    if (box == ContentBox.FULL) {
+        PageBitmap(renderer, index, modifier)
+        return
+    }
+    BoxWithConstraints(modifier.background(Color.White).clipToBounds()) {
+        val fullW = maxWidth / box.width
+        val fullH = fullW / renderer.aspectRatio(index)
+        PageBitmap(
+            renderer, index,
+            Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)
+                .offset(x = -fullW * box.left, y = -fullH * box.top)
+                .requiredSize(fullW, fullH),
+        )
+    }
+}
+
 /** A page image that fills its modifier's size (callers size it to the page's aspect ratio). */
 @Composable
 fun PageBitmap(renderer: PageRenderer, index: Int, modifier: Modifier) {
+    val renderScale = LocalRenderScale.current
     BoxWithConstraints(modifier.background(Color.White)) {
-        val widthPx = if (constraints.hasBoundedWidth) constraints.maxWidth else 1080
+        val widthPx = ((if (constraints.hasBoundedWidth) constraints.maxWidth else 1080) * renderScale).toInt()
         val image by rememberPageBitmap(renderer, index, widthPx)
         image?.let { Image(it, contentDescription = "Page ${index + 1}", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds) }
         LocalPageOverlay.current?.invoke(index)
@@ -101,11 +159,12 @@ fun FittedPage(
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
 ) {
+    val box = rememberVisibleBox(renderer, index)
     BoxWithConstraints(modifier, contentAlignment = alignment) {
-        val ratio = renderer.aspectRatio(index)
+        val ratio = renderer.visibleRatio(index, box)
         val boxRatio = maxWidth / maxHeight
         val (w, h) = if (ratio > boxRatio) maxWidth to maxWidth / ratio else maxHeight * ratio to maxHeight
-        PageBitmap(renderer, index, Modifier.size(w, h))
+        VisiblePage(renderer, index, box, Modifier.size(w, h))
     }
 }
 
@@ -224,6 +283,7 @@ fun VerticalScrollView(
     var viewportHeight by remember { mutableIntStateOf(0) }
     var viewportWidth by remember { mutableIntStateOf(0) }
     val currentWidthFraction by rememberUpdatedState(widthFraction)
+    val currentTrim by rememberUpdatedState(LocalTrimMargins.current)
     val controller = remember(listState) {
         object : PageController {
             override val currentPage: Int
@@ -247,10 +307,14 @@ fun VerticalScrollView(
             override suspend fun jumpTo(page: Int) = listState.scrollToItem(page.coerceIn(0, count - 1))
             override suspend fun jumpTo(page: Int, yUnits: Float) {
                 // Land a little above the target so the music leading into it is visible.
-                val pageWidthPx = viewportWidth * currentWidthFraction
-                val offset = (yUnits * pageWidthPx - viewportHeight * 0.15f).toInt().coerceAtLeast(0)
-                listState.animateScrollToItem(page.coerceIn(0, count - 1), offset)
+                val p = page.coerceIn(0, count - 1)
+                val box = if (currentTrim) renderer.cachedContentBounds(p) ?: ContentBox.FULL else ContentBox.FULL
+                val fullWidthPx = viewportWidth * currentWidthFraction / box.width
+                val yPx = yUnits * fullWidthPx - box.top * fullWidthPx / renderer.aspectRatio(p)
+                val offset = (yPx - viewportHeight * 0.15f).toInt().coerceAtLeast(0)
+                listState.animateScrollToItem(p, offset)
             }
+            override fun scrollBy(px: Float) { listState.dispatchRawDelta(px) }
         }
     }
     RegisterController(controller, register)
@@ -291,8 +355,9 @@ fun VerticalScrollView(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         items(count, key = { it }) { i ->
+            val box = rememberVisibleBox(renderer, i)
             Box(Modifier.fillMaxWidth(widthFraction)) {
-                PageBitmap(renderer, i, Modifier.fillMaxWidth().aspectRatio(renderer.aspectRatio(i)))
+                VisiblePage(renderer, i, box, Modifier.fillMaxWidth().aspectRatio(renderer.visibleRatio(i, box)))
             }
         }
     }
