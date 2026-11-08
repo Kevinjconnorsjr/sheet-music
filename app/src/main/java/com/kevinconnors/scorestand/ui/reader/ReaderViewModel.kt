@@ -16,6 +16,10 @@ import com.kevinconnors.scorestand.render.PageSources
 import com.kevinconnors.scorestand.ui.reader.audio.AudioController
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.reader.markup.ToolSettings
+import com.kevinconnors.scorestand.notation.MusicXml
+import com.kevinconnors.scorestand.notation.NotationPlayer
+import com.kevinconnors.scorestand.notation.ParsedScore
+import com.kevinconnors.scorestand.practice.PianoSynth
 import com.kevinconnors.scorestand.ui.tools.MetronomeController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -101,6 +105,10 @@ class ReaderViewModel(
             error = "This score is no longer in your library."
             return
         }
+        if (score.isNotation()) {
+            openNotation(score)
+            return
+        }
         try {
             val renderer = withContext(Dispatchers.IO) {
                 PageRenderer(PageSources.open(repo.fileFor(score), score.mimeType))
@@ -109,6 +117,8 @@ class ReaderViewModel(
             val previous = loaded
             val start = if (fromStart) 0 else score.lastPage.coerceIn(0, renderer.pageCount - 1)
             loaded = Loaded(score, renderer, start, markup)
+            notation = null
+            notationPlayer.stop()
             audio.openScore(score.id)
             metronome.load(score.metronomeBpm.takeIf { it > 0 } ?: 100, score.beatsPerBar)
             error = null
@@ -116,6 +126,52 @@ class ReaderViewModel(
             repo.scoreDao.markOpened(id, System.currentTimeMillis())
         } catch (e: Exception) {
             error = "Couldn't open \"${score.title}\": ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    /** A MusicXML score: its text for the renderer and its notes for playback. */
+    data class NotationDoc(val score: Score, val xml: String, val parsed: ParsedScore)
+
+    var notation by mutableStateOf<NotationDoc?>(null)
+        private set
+    val notationPlayer = NotationPlayer(app)
+
+    private suspend fun openNotation(score: Score) {
+        try {
+            val doc = withContext(Dispatchers.IO) {
+                val xml = repo.readNotation(score)
+                NotationDoc(score, xml, MusicXml.parse(xml))
+            }
+            notationPlayer.stop()
+            val previous = loaded
+            loaded = null
+            notation = doc
+            previous?.renderer?.close()
+            audio.openScore(score.id)
+            metronome.load(score.metronomeBpm.takeIf { it > 0 } ?: doc.parsed.tempos.first().bpm.toInt(), score.beatsPerBar)
+            error = null
+            repo.scoreDao.markOpened(score.id, System.currentTimeMillis())
+        } catch (e: Exception) {
+            error = "Couldn't open \"${score.title}\": ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    fun setTranspose(semitones: Int) {
+        val doc = notation ?: return
+        val n = semitones.coerceIn(-12, 12)
+        notation = doc.copy(score = doc.score.copy(transposeSemitones = n))
+        viewModelScope.launch { repo.scoreDao.updateTranspose(doc.score.id, n) }
+    }
+
+    fun shareMidi(onReady: (android.content.Intent) -> Unit, onError: (String) -> Unit) {
+        val score = notation?.score ?: return
+        val app = getApplication<ScoreStandApp>()
+        viewModelScope.launch {
+            try {
+                onReady(app.exporter.shareIntent(app.exporter.exportMidi(score)))
+            } catch (e: Exception) {
+                onError("Couldn't export: ${e.message ?: e.javaClass.simpleName}")
+            }
         }
     }
 
@@ -139,6 +195,15 @@ class ReaderViewModel(
         viewModelScope.launch { repo.scoreDao.updateLastPage(l.score.id, page) }
     }
 
+    fun setTrimMargins(trim: Boolean, currentPage: Int) {
+        val l = loaded ?: return
+        loaded = l.copy(score = l.score.copy(trimMargins = trim), initialPage = currentPage)
+        viewModelScope.launch { repo.scoreDao.updateTrimMargins(l.score.id, trim) }
+    }
+
+    /** On-screen keyboard sound; runs only while the keyboard is open. */
+    val piano = PianoSynth()
+
     fun setViewMode(mode: ViewMode, currentPage: Int) {
         val l = loaded ?: return
         loaded = l.copy(score = l.score.copy(viewMode = mode), initialPage = currentPage)
@@ -148,6 +213,8 @@ class ReaderViewModel(
     override fun onCleared() {
         audio.release()
         metronome.stop()
+        piano.stop()
+        notationPlayer.release()
         loaded?.renderer?.close()
     }
 }

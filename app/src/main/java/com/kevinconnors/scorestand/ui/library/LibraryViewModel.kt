@@ -114,7 +114,8 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     fun exportPdf(score: Score) = viewModelScope.launch {
         importing.value = true
         try {
-            shareChannel.send(app.exporter.shareIntent(app.exporter.exportPdf(score)))
+            val file = if (score.isNotation()) app.exporter.exportMidi(score) else app.exporter.exportPdf(score)
+            shareChannel.send(app.exporter.shareIntent(file))
         } catch (e: Exception) {
             messageChannel.send("Couldn't export: ${e.message ?: e.javaClass.simpleName}")
         } finally {

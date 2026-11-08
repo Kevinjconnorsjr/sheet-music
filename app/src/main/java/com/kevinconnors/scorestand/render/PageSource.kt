@@ -121,6 +121,48 @@ class ImagePageSource(private val file: File) : PageSource {
     override fun close() {}
 }
 
+/** A region of a page in fractions of its width/height (0..1). */
+data class ContentBox(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+    val width get() = right - left
+    val height get() = bottom - top
+
+    companion object {
+        val FULL = ContentBox(0f, 0f, 1f, 1f)
+
+        /**
+         * Finds the box around everything that isn't (near-)white, plus a small border.
+         * Ignores specks: a row/column needs a few dark pixels to count. Never crops away more
+         * than needed, and returns [FULL] for blank pages.
+         */
+        fun find(pixels: IntArray, width: Int, height: Int, padding: Float = 0.015f): ContentBox {
+            if (width <= 0 || height <= 0) return FULL
+            fun dark(p: Int): Boolean {
+                val a = (p ushr 24) and 0xFF
+                if (a < 128) return false
+                val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
+                return (r * 299 + g * 587 + b * 114) / 1000 < 200
+            }
+            val colCounts = IntArray(width)
+            val rowCounts = IntArray(height)
+            for (y in 0 until height) for (x in 0 until width) if (dark(pixels[y * width + x])) { colCounts[x]++; rowCounts[y]++ }
+            val minHits = 2
+            val l = colCounts.indexOfFirst { it >= minHits }
+            if (l < 0) return FULL
+            val r = colCounts.indexOfLast { it >= minHits }
+            val t = rowCounts.indexOfFirst { it >= minHits }
+            val b = rowCounts.indexOfLast { it >= minHits }
+            val box = ContentBox(
+                (l.toFloat() / width - padding).coerceAtLeast(0f),
+                (t.toFloat() / height - padding).coerceAtLeast(0f),
+                ((r + 1).toFloat() / width + padding).coerceAtMost(1f),
+                ((b + 1).toFloat() / height + padding).coerceAtMost(1f),
+            )
+            // Something tiny (a page number alone) isn't worth zooming into.
+            return if (box.width < 0.2f || box.height < 0.1f) FULL else box
+        }
+    }
+}
+
 /** Wraps a [PageSource] with an in-memory bitmap cache and off-main-thread rendering. */
 class PageRenderer(private val source: PageSource) : Closeable {
     val pageCount get() = source.pageCount
@@ -132,8 +174,23 @@ class PageRenderer(private val source: PageSource) : Closeable {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    /** Rounds widths up so small layout changes reuse the same bitmap. */
-    private fun bucket(width: Int) = (((width + 127) / 128) * 128).coerceIn(128, 2560)
+    /** Rounds widths up so small layout changes reuse the same bitmap. Zoomed pages go up to 4096 px. */
+    private fun bucket(width: Int) = (((width + 127) / 128) * 128).coerceIn(128, 4096)
+
+    private val contentBounds = java.util.concurrent.ConcurrentHashMap<Int, ContentBox>()
+
+    fun cachedContentBounds(index: Int): ContentBox? = contentBounds[index]
+
+    /** Where the printed content sits on [index], found once from a small render and cached. */
+    suspend fun contentBounds(index: Int): ContentBox {
+        contentBounds[index]?.let { return it }
+        return withContext(Dispatchers.Default) {
+            val small = withContext(Dispatchers.IO) { source.render(index, 400) }
+            val pixels = IntArray(small.width * small.height)
+            small.getPixels(pixels, 0, small.width, 0, 0, small.width, small.height)
+            ContentBox.find(pixels, small.width, small.height)
+        }.also { contentBounds[index] = it }
+    }
 
     fun cached(index: Int, width: Int): Bitmap? = cache.get("$index@${bucket(width)}")
 

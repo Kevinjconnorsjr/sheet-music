@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.5, maximum-scale=5, user-scalable=yes">
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; }
+  #score { width: 100%; }
+  #status { font: 16px sans-serif; color: #555; padding: 24px; text-align: center; }
+</style>
+<!-- OpenSheetMusicDisplay (BSD-3-Clause, see OSMD-LICENSE.txt), which bundles VexFlow (MIT). -->
+<script src="opensheetmusicdisplay.min.js"></script>
+</head>
+<body>
+<div id="status">Preparing the score…</div>
+<div id="score"></div>
+<script>
+  // Bridge: the app provides `Android` (getScoreXml, onLoaded, onError). Tests can provide their own.
+  const bridge = window.Android || window.TestBridge;
+  let osmd = null;
+
+  function report(err) {
+    document.getElementById("status").textContent = "Couldn't show this score: " + err;
+    if (bridge && bridge.onError) bridge.onError(String(err));
+  }
+
+  async function load(transpose, zoom) {
+    try {
+      const xml = bridge.getScoreXml();
+      osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("score", {
+        autoResize: true,
+        backend: "svg",
+        drawTitle: true,
+        followCursor: true,
+        cursorsOptions: [{ type: 0, color: "#1E3A5F", alpha: 0.35, follow: true }],
+      });
+      osmd.TransposeCalculator = new opensheetmusicdisplay.TransposeCalculator();
+      await osmd.load(xml);
+      osmd.zoom = zoom || 1.0;
+      osmd.Sheet.Transpose = transpose || 0;
+      osmd.updateGraphic();
+      osmd.render();
+      document.getElementById("status").style.display = "none";
+      bridge.onLoaded(osmd.Sheet.SourceMeasures.length);
+    } catch (e) {
+      report(e && e.message ? e.message : e);
+    }
+  }
+
+  function setTranspose(semitones) {
+    if (!osmd) return;
+    const shown = cursorShown;
+    osmd.Sheet.Transpose = semitones;
+    osmd.updateGraphic();
+    osmd.render();
+    if (shown) { osmd.cursor.show(); seekCursor(lastTarget, true); }
+  }
+
+  function setZoom(z) {
+    if (!osmd) return;
+    osmd.zoom = z;
+    osmd.render();
+  }
+
+  // Playback cursor. Positions are in whole notes from the start (as OSMD counts them).
+  let cursorShown = false;
+  let lastTarget = 0;
+  function seekCursor(wholeNotes, force) {
+    if (!osmd) return;
+    const c = osmd.cursor;
+    if (!cursorShown) { c.show(); cursorShown = true; }
+    const it = c.Iterator;
+    if (force || wholeNotes < lastTarget || it.EndReached) c.reset();
+    lastTarget = wholeNotes;
+    // Step forward until the next step would pass the target.
+    let guard = 0;
+    while (!c.Iterator.EndReached && guard++ < 10000) {
+      const clone = c.Iterator.clone();
+      clone.moveToNext();
+      if (clone.EndReached || clone.currentTimeStamp.RealValue > wholeNotes + 1e-6) break;
+      c.next();
+    }
+  }
+
+  function hideCursor() {
+    if (osmd && cursorShown) { osmd.cursor.hide(); cursorShown = false; lastTarget = 0; }
+  }
+
+  function cursorPosition() {
+    return osmd ? osmd.cursor.Iterator.currentTimeStamp.RealValue : -1;
+  }
+</script>
+</body>
+</html>

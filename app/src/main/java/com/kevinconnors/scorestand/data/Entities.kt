@@ -33,8 +33,15 @@ data class Score(
     /** Metronome tempo remembered for this piece; 0 = not set yet. */
     @ColumnInfo(defaultValue = "0") val metronomeBpm: Int = 0,
     @ColumnInfo(defaultValue = "4") val beatsPerBar: Int = 4,
+    /** Crop the white margins so the music fills more of the screen. */
+    @ColumnInfo(defaultValue = "0") val trimMargins: Boolean = false,
+    /** MusicXML scores: semitones to transpose the notation and playback by. */
+    @ColumnInfo(defaultValue = "0") val transposeSemitones: Int = 0,
 ) {
     fun tagList(): List<String> = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** MusicXML scores are shown as live notation; [pageCount] then holds the number of bars. */
+    fun isNotation() = mimeType == com.kevinconnors.scorestand.notation.MusicXml.MIME
 }
 
 @Entity(tableName = "setlists")

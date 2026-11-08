@@ -181,7 +181,15 @@ fun LibraryScreen(
         floatingActionButton = {
             if (tab == 0) {
                 ExtendedFloatingActionButton(
-                    onClick = { picker.launch(arrayOf("application/pdf", "image/*")) },
+                    onClick = {
+                        // MusicXML often arrives as plain XML or a generic file type, so allow those
+                        // too; anything that isn't a score is rejected with a message.
+                        picker.launch(arrayOf(
+                            "application/pdf", "image/*",
+                            "application/vnd.recordare.musicxml+xml", "application/vnd.recordare.musicxml",
+                            "application/xml", "text/xml", "application/octet-stream", "application/zip",
+                        ))
+                    },
                     icon = { Icon(Icons.Outlined.UploadFile, null) },
                     text = { Text("Import") },
                 )
@@ -263,7 +271,7 @@ private fun ScoresTab(
         }
         if (scores.isEmpty()) {
             EmptyState(
-                if (filtering) "No scores match." else "Your library is empty.\nTap Import to add PDFs or photos of sheet music.",
+                if (filtering) "No scores match." else "Your library is empty.\nTap Import to add PDFs, photos of sheet music, or MusicXML files.",
             )
         } else {
             LazyVerticalGrid(
@@ -334,7 +342,8 @@ private fun ScoreCard(
             ScoreThumbnail(vm.thumbnailFor(score), Modifier.fillMaxWidth().aspectRatio(0.75f))
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 Text(score.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                val subtitle = listOf(score.composer, "${score.pageCount} page${if (score.pageCount == 1) "" else "s"}")
+                val size = if (score.isNotation()) "MusicXML · ${score.pageCount} bars" else "${score.pageCount} page${if (score.pageCount == 1) "" else "s"}"
+                val subtitle = listOf(score.composer, size)
                     .filter { it.isNotBlank() }.joinToString(" · ")
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -342,7 +351,11 @@ private fun ScoreCard(
         DropdownMenu(menu, { menu = false }) {
             DropdownMenuItem(text = { Text("Edit details") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
             DropdownMenuItem(text = { Text("Add to setlist") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; onAddToSetlist() })
-            DropdownMenuItem(text = { Text("Share as PDF") }, leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) }, onClick = { menu = false; onShare() })
+            DropdownMenuItem(
+                text = { Text(if (score.isNotation()) "Share MIDI file" else "Share as PDF") },
+                leadingIcon = { Icon(if (score.isNotation()) Icons.Outlined.LibraryMusic else Icons.Outlined.PictureAsPdf, null) },
+                onClick = { menu = false; onShare() },
+            )
             DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Outlined.Delete, null) }, onClick = { menu = false; onDelete() })
         }
     }
