@@ -13,14 +13,38 @@ android {
         applicationId = "com.kevinconnors.scorestand"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI numbers every build so each new APK installs as an update over the last one.
+        val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+    }
+
+    // One fixed key for every published build, so each update installs over the previous
+    // version and keeps your library. The key is never committed: CI decodes it from the
+    // SIGNING_KEYSTORE_BASE64 secret into $SIGNING_KEYSTORE; locally it can sit in app/signing/.
+    // Without it (e.g. pull requests from forks) builds fall back to the throw-away debug key.
+    val sideloadKey = System.getenv("SIGNING_KEYSTORE")?.let { file(it) } ?: file("signing/scorestand-sideload.jks")
+    val hasSideloadKey = sideloadKey.exists()
+    signingConfigs {
+        if (hasSideloadKey) {
+            create("sideload") {
+                storeFile = sideloadKey
+                storePassword = "scorestand"
+                keyAlias = "scorestand"
+                keyPassword = "scorestand"
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            if (hasSideloadKey) signingConfig = signingConfigs.getByName("sideload")
+        }
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName(if (hasSideloadKey) "sideload" else "debug")
         }
     }
     compileOptions {

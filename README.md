@@ -102,9 +102,35 @@ Requirements: JDK 17+ and the Android SDK (platform 35).
 # APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Every push also builds the APK on GitHub Actions. Open the **Actions** tab, pick the latest
-**Build APK** run, and download **ScoreStand-debug-apk** to install on a device
-(enable "Install unknown apps" for your browser or file manager).
+### Installing on your phone
+
+Every change merged to `main` is published as a **GitHub Release** with a ready-to-install APK
+(`ScoreStand-0.1.N.apk`). Published builds are all signed with the same key, so each new
+version installs **over** the previous one and keeps your library.
+
+**Easiest: let Obtainium install and update it for you**
+1. Install [Obtainium](https://github.com/ImranR98/Obtainium) (free, open source).
+2. Tap *Add App*, paste `https://github.com/Kevinjconnorsjr/sheet-music`, tap *Add*, then *Install*.
+3. From then on Obtainium tells you when a new version is out — tap **Update**.
+
+**Manual:** open the [latest release](https://github.com/Kevinjconnorsjr/sheet-music/releases/latest)
+on your phone, download `ScoreStand-0.1.N.apk`, open it and tap *Install/Update* (allow installs
+from your browser the first time).
+
+Branch and pull-request builds are also on each Actions run as the **ScoreStand-apk** artifact
+(these may use a throw-away key if the signing secret isn't available to them).
+
+### Signing key (maintainers)
+
+The key is never committed. CI reads it from the repository secret `SIGNING_KEYSTORE_BASE64`
+(the keystore file, base64-encoded; store and key password `scorestand`, alias `scorestand`).
+Without the secret, builds still work but use a throw-away key and no release is published.
+Keep a copy of the keystore somewhere safe: if it's lost, the next version can't install over
+the old one (you'd back up, uninstall, reinstall and restore).
+
+> Builds made before the fixed key (the first Actions runs) used a throw-away key. If one of
+> those is installed, back up your library (library ⋮ → Back up), uninstall it once, install
+> the new version, then restore.
 
 ## Tech
 
