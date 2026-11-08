@@ -16,6 +16,7 @@ import com.kevinconnors.scorestand.render.PageSources
 import com.kevinconnors.scorestand.ui.reader.audio.AudioController
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.reader.markup.ToolSettings
+import com.kevinconnors.scorestand.ui.tools.MetronomeController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -33,6 +34,37 @@ class ReaderViewModel(
 
     /** Markup tool choices survive moving between pieces. */
     val tools = ToolSettings()
+
+    private var metronomeSave: kotlinx.coroutines.Job? = null
+
+    /** Metronome tempo and beats are remembered per piece. */
+    val metronome = MetronomeController { bpm, beats ->
+        val id = loaded?.score?.id ?: return@MetronomeController
+        metronomeSave?.cancel()
+        metronomeSave = viewModelScope.launch {
+            kotlinx.coroutines.delay(400)
+            repo.scoreDao.updateMetronome(id, bpm, beats)
+        }
+    }
+
+    var exporting by mutableStateOf(false)
+        private set
+
+    /** Builds a PDF of the current score with its visible markings and hands back a share intent. */
+    fun exportPdf(onReady: (android.content.Intent) -> Unit, onError: (String) -> Unit) {
+        val score = loaded?.score ?: return
+        val app = getApplication<ScoreStandApp>()
+        viewModelScope.launch {
+            exporting = true
+            try {
+                onReady(app.exporter.shareIntent(app.exporter.exportPdf(score)))
+            } catch (e: Exception) {
+                onError("Couldn't export: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                exporting = false
+            }
+        }
+    }
 
     /** One player for the whole reader session; it switches tracks as pieces change. */
     val audio = AudioController(app, repo, viewModelScope)
@@ -78,6 +110,7 @@ class ReaderViewModel(
             val start = if (fromStart) 0 else score.lastPage.coerceIn(0, renderer.pageCount - 1)
             loaded = Loaded(score, renderer, start, markup)
             audio.openScore(score.id)
+            metronome.load(score.metronomeBpm.takeIf { it > 0 } ?: 100, score.beatsPerBar)
             error = null
             previous?.renderer?.close()
             repo.scoreDao.markOpened(id, System.currentTimeMillis())
@@ -114,6 +147,7 @@ class ReaderViewModel(
 
     override fun onCleared() {
         audio.release()
+        metronome.stop()
         loaded?.renderer?.close()
     }
 }

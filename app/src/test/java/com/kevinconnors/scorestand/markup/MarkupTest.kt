@@ -5,6 +5,7 @@ import com.kevinconnors.scorestand.data.Markup
 import com.kevinconnors.scorestand.data.MarkupDao
 import com.kevinconnors.scorestand.data.MarkupLayer
 import com.kevinconnors.scorestand.data.MarkupType
+import com.kevinconnors.scorestand.data.PageLink
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.reader.markup.Stamp
 import com.kevinconnors.scorestand.ui.reader.markup.isHitBy
@@ -38,6 +39,12 @@ private class FakeMarkupDao : MarkupDao {
     override suspend fun markups(scoreId: Long) = markups.values.filter { it.scoreId == scoreId }
     override suspend fun insert(items: List<Markup>) { items.forEach { markups[it.id] = it } }
     override suspend fun delete(ids: List<Long>) { ids.forEach { markups.remove(it) } }
+
+    val links = mutableListOf<PageLink>()
+    private var nextLinkId = 1L
+    override suspend fun links(scoreId: Long) = links.filter { it.scoreId == scoreId }
+    override suspend fun insertLink(link: PageLink): Long { val id = nextLinkId++; links += link.copy(id = id); return id }
+    override suspend fun deleteLink(id: Long) { links.removeAll { it.id == id } }
 }
 
 private fun MarkupSession.ink(page: Int, vararg pts: Float) = Markup(
@@ -103,6 +110,27 @@ class MarkupSessionTest {
         assertEquals(1, s.visibleOn(0).size)
         s.setVisible(s.layers.first(), false)
         assertTrue(s.visibleOn(0).isEmpty())
+    }
+
+    @Test
+    fun jumpLinksAreSavedAndRemoved() = runTest {
+        val dao = FakeMarkupDao()
+        val s = session(dao)
+        s.pendingLinkFrom = MarkupSession.LinkStart(3, 0.8f, 1.1f)
+        s.addLink(s.pendingLinkFrom!!, toPage = 0, toY = 0.4f, label = "D.S.")
+        advanceUntilIdle()
+        assertNull(s.pendingLinkFrom)
+        assertEquals(1, s.links.size)
+        assertEquals("D.S.", dao.links.single().label)
+        assertEquals(0, s.links.single().toPage)
+
+        // Reloading the score brings the link back.
+        val reloaded = session(dao)
+        assertEquals(1, reloaded.links.size)
+
+        s.deleteLink(s.links.single()); advanceUntilIdle()
+        assertTrue(s.links.isEmpty())
+        assertTrue(dao.links.isEmpty())
     }
 
     @Test

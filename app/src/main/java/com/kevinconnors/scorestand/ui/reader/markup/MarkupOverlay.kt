@@ -4,7 +4,23 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Shortcut
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -27,6 +43,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.kevinconnors.scorestand.data.Markup
 import com.kevinconnors.scorestand.data.MarkupType
+import com.kevinconnors.scorestand.data.PageLink
 
 /**
  * Draws the visible marks for [page] on top of the page image, and — while [editing] —
@@ -39,6 +56,8 @@ fun MarkupOverlay(
     page: Int,
     editing: Boolean,
     onRequestText: (page: Int, x: Float, y: Float) -> Unit,
+    onLinkSpot: (page: Int, x: Float, y: Float) -> Unit,
+    onLinkTapped: (PageLink) -> Unit,
 ) {
     val marks by remember(session, page) { derivedStateOf { session.visibleOn(page) } }
     val measurer = rememberTextMeasurer()
@@ -83,6 +102,12 @@ fun MarkupOverlay(
                 },
             )
         }
+        Tool.LINK -> Modifier.pointerInput(session, page) {
+            detectTapGestures { pos ->
+                val unit = size.width.toFloat()
+                onLinkSpot(page, pos.x / unit, pos.y / unit)
+            }
+        }
         Tool.TEXT, Tool.STAMP -> Modifier.pointerInput(session, page, tool) {
             detectTapGestures { pos ->
                 val unit = size.width.toFloat()
@@ -104,6 +129,9 @@ fun MarkupOverlay(
         Tool.PAN -> Modifier
     }
 
+    val linkColor = Color(0xFF1E3A5F)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val unitPx = constraints.maxWidth.toFloat()
     Canvas(Modifier.fillMaxSize().then(input)) {
         val unit = size.width
         if (unit <= 0f) return@Canvas
@@ -124,6 +152,41 @@ fun MarkupOverlay(
         eraser?.let {
             drawCircle(Color(0x88000000), settings.size(Tool.ERASER) * unit, it * unit, style = Stroke(1.5.dp.toPx()))
         }
+        if (editing) {
+            // Where links land: a small flag in the left margin.
+            for (l in session.links) if (l.toPage == page) {
+                val y = l.toY * unit
+                val s = 8.dp.toPx()
+                drawPath(
+                    Path().apply { moveTo(0f, y - s); lineTo(s * 1.6f, y); lineTo(0f, y + s); close() },
+                    linkColor.copy(alpha = 0.8f),
+                )
+            }
+            session.pendingLinkFrom?.takeIf { it.page == page }?.let {
+                drawCircle(linkColor, 14.dp.toPx(), Offset(it.x * unit, it.y * unit), style = Stroke(3.dp.toPx()))
+            }
+        }
+    }
+    // Link badges: tap to jump while reading; tap with the link tool to remove.
+    val badgesEnabled = !editing || tool == Tool.LINK
+    for (l in session.links) if (l.fromPage == page) {
+        val density = LocalDensity.current
+        Surface(
+            onClick = { onLinkTapped(l) },
+            enabled = badgesEnabled,
+            shape = RoundedCornerShape(12.dp),
+            color = linkColor.copy(alpha = 0.9f),
+            contentColor = Color.White,
+            modifier = Modifier.offset {
+                with(density) { IntOffset((l.fromX * unitPx - 14.dp.toPx()).roundToInt(), (l.fromY * unitPx - 12.dp.toPx()).roundToInt()) }
+            },
+        ) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Outlined.Shortcut, null, Modifier.size(14.dp))
+                Text(" ${l.label} → p${l.toPage + 1}", fontSize = 11.sp, maxLines = 1)
+            }
+        }
+    }
     }
 }
 

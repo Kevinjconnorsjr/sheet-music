@@ -64,6 +64,27 @@ class Markup(
     override fun hashCode() = id.hashCode()
 }
 
+/**
+ * A tappable jump in the music — a repeat, D.S., D.C., coda… Tapping the badge at
+ * ([fromX], [fromY]) on [fromPage] goes to [toPage], scrolled to [toY] in continuous mode.
+ * Coordinates are in page-width units like [Markup].
+ */
+@Entity(
+    tableName = "page_links",
+    foreignKeys = [ForeignKey(entity = Score::class, parentColumns = ["id"], childColumns = ["scoreId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("scoreId")],
+)
+data class PageLink(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val scoreId: Long,
+    val fromPage: Int,
+    val fromX: Float,
+    val fromY: Float,
+    val toPage: Int,
+    val toY: Float,
+    val label: String,
+)
+
 class Converters {
     @TypeConverter
     fun floatsToBytes(value: FloatArray?): ByteArray? = value?.let {
@@ -99,4 +120,13 @@ interface MarkupDao {
 
     @Query("DELETE FROM markups WHERE id IN (:ids)")
     suspend fun delete(ids: List<Long>)
+
+    @Query("SELECT * FROM page_links WHERE scoreId = :scoreId")
+    suspend fun links(scoreId: Long): List<PageLink>
+
+    @Insert
+    suspend fun insertLink(link: PageLink): Long
+
+    @Query("DELETE FROM page_links WHERE id = :id")
+    suspend fun deleteLink(id: Long)
 }

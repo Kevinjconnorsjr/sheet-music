@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Shortcut
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Approval
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledIconToggleButton
@@ -97,6 +99,7 @@ private fun Tool.icon(): ImageVector = when (this) {
     Tool.ERASER -> EraserIcon
     Tool.TEXT -> Icons.Outlined.TextFields
     Tool.STAMP -> Icons.Outlined.Approval
+    Tool.LINK -> Icons.AutoMirrored.Outlined.Shortcut
 }
 
 @Composable
@@ -145,7 +148,7 @@ fun MarkupToolbar(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            ToolOptions(settings)
+            ToolOptions(settings, session)
         }
     }
 
@@ -162,7 +165,7 @@ fun MarkupToolbar(
 }
 
 @Composable
-private fun ToolOptions(settings: ToolSettings) {
+private fun ToolOptions(settings: ToolSettings, session: MarkupSession) {
     val tool = settings.tool
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
@@ -172,6 +175,12 @@ private fun ToolOptions(settings: ToolSettings) {
         when (tool) {
             Tool.PAN -> Text(
                 "Swipe or scroll as usual. Pick a tool to mark up the music.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 10.dp),
+            )
+            Tool.LINK -> Text(
+                if (session.pendingLinkFrom == null) "Tap where the jump starts (e.g. a repeat sign, D.S. or “to Coda”). Tap a badge to remove it."
+                else "Now go to where it jumps to and tap that spot.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 10.dp),
             )
@@ -321,3 +330,31 @@ fun textMarkup(session: MarkupSession, settings: ToolSettings, page: Int, x: Flo
     id = session.newId(), scoreId = session.scoreId, layerId = session.activeLayerId, page = page,
     type = MarkupType.TEXT, color = settings.penColor, size = settings.size(Tool.TEXT), x = x, y = y, text = text,
 )
+
+private val linkPresets = listOf("Repeat", "D.S.", "D.C.", "To Coda", "Coda", "Fine", "1st ending", "2nd ending", "Jump")
+
+/** Names a new jump link; the label is shown on its badge. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun LinkLabelDialog(toPage: Int, onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var label by remember { mutableStateOf("Repeat") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Jump to page ${toPage + 1}") },
+        text = {
+            Column {
+                Text("What kind of jump is it?", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    linkPresets.forEach { p ->
+                        androidx.compose.material3.FilterChip(selected = label == p, onClick = { label = p }, label = { Text(p) })
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(label, { label = it.take(20) }, label = { Text("Label") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(enabled = label.isNotBlank(), onClick = { onCreate(label.trim()) }) { Text("Create link") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

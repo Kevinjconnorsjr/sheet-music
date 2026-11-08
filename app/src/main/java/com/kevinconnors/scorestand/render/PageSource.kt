@@ -20,6 +20,9 @@ interface PageSource : Closeable {
     /** Width divided by height of the page. */
     fun aspectRatio(index: Int): Float
 
+    /** Page width in PDF points (1/72 inch), used when exporting. */
+    fun widthPoints(index: Int): Int = 612
+
     /** Renders [index] to a bitmap roughly [targetWidth] pixels wide. Blocking. */
     fun render(index: Int, targetWidth: Int): Bitmap
 }
@@ -51,10 +54,12 @@ class PdfPageSource(file: File) : PageSource {
 
     override val pageCount: Int = renderer.pageCount
 
+    private val widths = IntArray(pageCount)
     private val ratios: FloatArray = synchronized(lock) {
         FloatArray(pageCount) { i ->
             val page = renderer.openPage(i)
             try {
+                widths[i] = page.width
                 page.width.toFloat() / page.height.coerceAtLeast(1)
             } finally {
                 page.close()
@@ -63,6 +68,7 @@ class PdfPageSource(file: File) : PageSource {
     }
 
     override fun aspectRatio(index: Int): Float = ratios.getOrElse(index) { 0.7071f }
+    override fun widthPoints(index: Int): Int = widths.getOrElse(index) { 612 }.takeIf { it > 0 } ?: 612
 
     override fun render(index: Int, targetWidth: Int): Bitmap = synchronized(lock) {
         val ratio = aspectRatio(index)

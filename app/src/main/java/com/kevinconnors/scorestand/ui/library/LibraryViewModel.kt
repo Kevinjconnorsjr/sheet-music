@@ -31,6 +31,11 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     val tagFilter = MutableStateFlow<String?>(null)
     val importing = MutableStateFlow(false)
 
+    private val app = app as ScoreStandApp
+    private val shareChannel = Channel<android.content.Intent>(Channel.BUFFERED)
+    /** Share-sheet intents for exported PDFs. */
+    val shares = shareChannel.receiveAsFlow()
+
     private val messageChannel = Channel<String>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
 
@@ -104,6 +109,40 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     fun addToSetlist(setlist: Setlist, score: Score) = viewModelScope.launch {
         repo.setlistDao.addScores(setlist.id, listOf(score.id))
         messageChannel.send("Added to \"${setlist.name}\"")
+    }
+
+    fun exportPdf(score: Score) = viewModelScope.launch {
+        importing.value = true
+        try {
+            shareChannel.send(app.exporter.shareIntent(app.exporter.exportPdf(score)))
+        } catch (e: Exception) {
+            messageChannel.send("Couldn't export: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            importing.value = false
+        }
+    }
+
+    fun backup(target: Uri) = viewModelScope.launch {
+        importing.value = true
+        try {
+            app.backups.backup(target)
+            messageChannel.send("Backup saved")
+        } catch (e: Exception) {
+            messageChannel.send("Backup failed: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            importing.value = false
+        }
+    }
+
+    /** Replaces the library with the backup and restarts the app. */
+    fun restore(source: Uri) = viewModelScope.launch {
+        importing.value = true
+        try {
+            app.backups.restore(source)
+        } catch (e: Exception) {
+            importing.value = false
+            messageChannel.send("Restore failed: ${e.message ?: e.javaClass.simpleName}")
+        }
     }
 
     fun deleteSetlist(setlist: Setlist) = viewModelScope.launch { repo.setlistDao.delete(setlist.id) }

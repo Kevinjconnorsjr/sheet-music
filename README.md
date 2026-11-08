@@ -10,7 +10,7 @@ and practise along with attached audio tracks.
 | 1. Library & reader | Import PDF/images, library grid, search, tags, sorting, setlists, reader with 4 layouts, Bluetooth pedals | ✅ Done |
 | 2. Annotation | Pen, highlighter, eraser, text, music-symbol stamps, layers, undo/redo | ✅ Done |
 | 3. Audio | Attach tracks, speed (keeps pitch), pitch (keeps speed), pan, volume, A–B loop, markers | ✅ Done |
-| 4. Extras | Page links for repeats/D.S./coda, metronome, tuner, backup/export | ⏳ Next |
+| 4. Extras | Page links for repeats/D.S./coda, metronome, tuner, backup/export | ✅ Done |
 
 ## What works now
 
@@ -68,6 +68,30 @@ and practise along with attached audio tracks.
 - Every track remembers its own speed, pitch, pan, volume and loop
 - The panel stays up when the toolbars are hidden, so you can play along full-screen;
   playback pauses if headphones are unplugged or a call comes in
+
+**Jump links** (link tool ↪ in the markup toolbar)
+- Tap where a jump starts (a repeat sign, D.S., D.C., "to Coda"…), then go to where it lands
+  and tap there; pick a label (Repeat, D.S., D.C., To Coda, Coda, Fine, 1st/2nd ending, or your own)
+- While reading, tap the badge to jump — in continuous scroll it scrolls right to the spot.
+  A **Back to page N** chip takes you back
+- Tap a badge with the link tool to remove it
+
+**Metronome** (⋮ → Metronome in the reader)
+- 30–300 BPM with slider, ±1 buttons, presets and **tap tempo**; tempo names (Adagio, Allegro…)
+- 1–12 beats per bar with an accented first beat and beat lights
+- Sample-accurate clicks that don't drift; tempo and beats are remembered per piece
+
+**Tuner** (⋮ → Tuner in the reader or the library)
+- Chromatic tuner with note name, octave, frequency and a ±50 cent meter (green when within 5¢)
+- Adjustable reference pitch (A4 = 400–480 Hz, e.g. 442 or 415 for baroque) and sharps/flats
+- Listens live through the microphone; nothing is recorded or saved
+
+**Sharing & backup**
+- **Share as PDF** (score long-press menu, or ⋮ in the reader): a new PDF with your visible
+  markings drawn in — for printing, emailing or sending to bandmates
+- **Back up library…** (library ⋮): one .zip with every score, marking, setlist, audio track
+  and setting. **Restore from backup…** replaces the library with a backup (handy for moving
+  to a new phone) and restarts the app
 
 ## Building
 

@@ -33,6 +33,9 @@ interface ScoreDao {
 
     @Query("UPDATE scores SET viewMode = :mode WHERE id = :id")
     suspend fun updateViewMode(id: Long, mode: ViewMode)
+
+    @Query("UPDATE scores SET metronomeBpm = :bpm, beatsPerBar = :beatsPerBar WHERE id = :id")
+    suspend fun updateMetronome(id: Long, bpm: Int, beatsPerBar: Int)
 }
 
 @Dao

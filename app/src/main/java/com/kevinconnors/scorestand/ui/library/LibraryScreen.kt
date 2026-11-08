@@ -33,6 +33,13 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.ui.platform.LocalContext
+import com.kevinconnors.scorestand.ui.tools.TunerDialog
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -97,7 +104,16 @@ fun LibraryScreen(
     var showNewSetlist by remember { mutableStateOf(false) }
 
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) { vm.shares.collect { context.startActivity(it) } }
+    var moreMenu by remember { mutableStateOf(false) }
+    var showTuner by remember { mutableStateOf(false) }
+    var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        uri?.let(vm::backup)
+    }
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> restoreUri = uri }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         vm.import(uris)
@@ -127,6 +143,20 @@ fun LibraryScreen(
                                         )
                                     }
                                 }
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { moreMenu = true }) { Icon(Icons.Outlined.MoreVert, "More") }
+                            DropdownMenu(moreMenu, { moreMenu = false }) {
+                                DropdownMenuItem(text = { Text("Tuner") }, leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) }, onClick = { moreMenu = false; showTuner = true })
+                                DropdownMenuItem(
+                                    text = { Text("Back up library…") }, leadingIcon = { Icon(Icons.Outlined.Backup, null) },
+                                    onClick = { moreMenu = false; backupPicker.launch("ScoreStand-backup-${java.time.LocalDate.now()}.zip") },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Restore from backup…") }, leadingIcon = { Icon(Icons.Outlined.Restore, null) },
+                                    onClick = { moreMenu = false; restorePicker.launch(arrayOf("application/zip", "application/octet-stream")) },
+                                )
                             }
                         }
                     },
@@ -179,6 +209,17 @@ fun LibraryScreen(
                 SetlistsTab(setlists, onOpenSetlist)
             }
         }
+    }
+
+    if (showTuner) TunerDialog(onDismiss = { showTuner = false })
+    restoreUri?.let { uri ->
+        ConfirmDialog(
+            title = "Restore this backup?",
+            message = "Everything in your library now — scores, markings, audio and setlists — will be replaced by the backup. The app will restart.",
+            confirmLabel = "Replace & restart",
+            onDismiss = { restoreUri = null },
+            onConfirm = { vm.restore(uri); restoreUri = null },
+        )
     }
 
     if (showNewSetlist) {
@@ -240,6 +281,7 @@ private fun ScoresTab(
                         onEdit = { editing = score },
                         onDelete = { deleting = score },
                         onAddToSetlist = { addingToSetlist = score },
+                        onShare = { vm.exportPdf(score) },
                     )
                 }
             }
@@ -284,6 +326,7 @@ private fun ScoreCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onAddToSetlist: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box {
@@ -299,6 +342,7 @@ private fun ScoreCard(
         DropdownMenu(menu, { menu = false }) {
             DropdownMenuItem(text = { Text("Edit details") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
             DropdownMenuItem(text = { Text("Add to setlist") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; onAddToSetlist() })
+            DropdownMenuItem(text = { Text("Share as PDF") }, leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) }, onClick = { menu = false; onShare() })
             DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Outlined.Delete, null) }, onClick = { menu = false; onDelete() })
         }
     }

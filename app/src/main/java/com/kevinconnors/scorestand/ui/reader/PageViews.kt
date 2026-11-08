@@ -56,6 +56,9 @@ interface PageController {
     suspend fun next(): Boolean
     suspend fun previous(): Boolean
     suspend fun jumpTo(page: Int)
+
+    /** Jumps to a spot on a page ([yUnits] in page-width units). Paged layouts just show the page. */
+    suspend fun jumpTo(page: Int, yUnits: Float) = jumpTo(page)
 }
 
 @Composable
@@ -219,6 +222,8 @@ fun VerticalScrollView(
     val count = renderer.pageCount
     val listState = rememberLazyListState(initialPage.coerceIn(0, count - 1))
     var viewportHeight by remember { mutableIntStateOf(0) }
+    var viewportWidth by remember { mutableIntStateOf(0) }
+    val currentWidthFraction by rememberUpdatedState(widthFraction)
     val controller = remember(listState) {
         object : PageController {
             override val currentPage: Int
@@ -240,6 +245,12 @@ fun VerticalScrollView(
                 listState.animateScrollBy(-viewportHeight * 0.85f); return true
             }
             override suspend fun jumpTo(page: Int) = listState.scrollToItem(page.coerceIn(0, count - 1))
+            override suspend fun jumpTo(page: Int, yUnits: Float) {
+                // Land a little above the target so the music leading into it is visible.
+                val pageWidthPx = viewportWidth * currentWidthFraction
+                val offset = (yUnits * pageWidthPx - viewportHeight * 0.15f).toInt().coerceAtLeast(0)
+                listState.animateScrollToItem(page.coerceIn(0, count - 1), offset)
+            }
         }
     }
     RegisterController(controller, register)
@@ -273,7 +284,7 @@ fun VerticalScrollView(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().onSizeChanged { viewportHeight = it.height },
+        modifier = Modifier.fillMaxSize().onSizeChanged { viewportHeight = it.height; viewportWidth = it.width },
         userScrollEnabled = userScrollEnabled,
         contentPadding = PaddingValues(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

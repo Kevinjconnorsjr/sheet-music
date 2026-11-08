@@ -29,6 +29,12 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Draw
+import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.outlined.HorizontalSplit
@@ -86,7 +92,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kevinconnors.scorestand.data.ViewMode
 import com.kevinconnors.scorestand.ui.reader.audio.AudioPanel
+import com.kevinconnors.scorestand.data.PageLink
+import com.kevinconnors.scorestand.ui.ConfirmDialog
+import com.kevinconnors.scorestand.ui.reader.markup.LinkLabelDialog
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupOverlay
+import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
+import com.kevinconnors.scorestand.ui.tools.MetronomeIcon
+import com.kevinconnors.scorestand.ui.tools.MetronomePanel
+import com.kevinconnors.scorestand.ui.tools.TunerDialog
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupToolbar
 import com.kevinconnors.scorestand.ui.reader.markup.TextNoteDialog
 import com.kevinconnors.scorestand.ui.reader.markup.Tool
@@ -144,6 +157,13 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
         uri?.let { audio.importTrack(it); showAudio = true }
     }
     val context = LocalContext.current
+    var showMetronome by rememberSaveable { mutableStateOf(false) }
+    var showTuner by rememberSaveable { mutableStateOf(false) }
+    // Jump links: where a followed link came from (for the "back" chip), a destination being
+    // labelled, and a link the user asked to delete.
+    var returnTo by remember { mutableStateOf<Int?>(null) }
+    var newLinkDest by remember { mutableStateOf<Triple<MarkupSession.LinkStart, Int, Float>?>(null) }
+    var deletingLink by remember { mutableStateOf<PageLink?>(null) }
     var lastKnownPage by remember { mutableIntStateOf(loaded.initialPage) }
 
     // Vertical-scroll settings, kept for the session.
@@ -205,7 +225,22 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
             },
     ) {
         val overlay: @Composable (Int) -> Unit = { page ->
-            MarkupOverlay(markup, tools, page, editing = annotating) { p, x, y -> pendingText = Triple(p, x, y) }
+            MarkupOverlay(
+                session = markup, settings = tools, page = page, editing = annotating,
+                onRequestText = { p, x, y -> pendingText = Triple(p, x, y) },
+                onLinkSpot = { p, x, y ->
+                    val from = markup.pendingLinkFrom
+                    if (from == null) markup.pendingLinkFrom = MarkupSession.LinkStart(p, x, y)
+                    else newLinkDest = Triple(from, p, y)
+                },
+                onLinkTapped = { link ->
+                    if (annotating) deletingLink = link
+                    else scope.launch {
+                        returnTo = controller?.currentPage
+                        controller?.jumpTo(link.toPage, link.toY)
+                    }
+                },
+            )
         }
         CompositionLocalProvider(LocalPageOverlay provides overlay) {
           key(score.viewMode) {
@@ -243,6 +278,15 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 onAnnotate = { annotating = true; autoScroll = false },
                 audioOpen = showAudio,
                 onToggleAudio = { showAudio = !showAudio },
+                onMetronome = { showMetronome = true },
+                onTuner = { showTuner = true },
+                exporting = vm.exporting,
+                onExport = {
+                    vm.exportPdf(
+                        onReady = { context.startActivity(it) },
+                        onError = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() },
+                    )
+                },
                 onMode = { mode ->
                     autoScroll = false
                     vm.setViewMode(mode, controller?.currentPage ?: lastKnownPage)
@@ -263,11 +307,36 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                 pageCount = pageCount,
                 onPreviousPage = { goPrevious() },
                 onNextPage = { goNext() },
-                onDone = { annotating = false },
+                onDone = { annotating = false; markup.pendingLinkFrom = null },
             )
         }
 
+        // After following a jump link, offer a way back.
+        returnTo?.let { back ->
+            Row(
+                Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = if (chromeVisible || annotating) 64.dp else 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.AssistChip(
+                    onClick = { scope.launch { controller?.jumpTo(back) }; returnTo = null },
+                    label = { Text("Back to page ${back + 1}") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, null) },
+                    trailingIcon = {
+                        Icon(Icons.Outlined.Close, "Dismiss", Modifier.size(18.dp).pointerInput(Unit) { detectTapGestures { returnTo = null } })
+                    },
+                    colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surface),
+                )
+            }
+        }
+
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()) {
+            AnimatedVisibility(
+                visible = showMetronome && !annotating,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+            ) {
+                MetronomePanel(vm.metronome, onClose = { showMetronome = false })
+            }
             // The audio panel stays up while the toolbars are hidden, so you can play along full-screen.
             AnimatedVisibility(
                 visible = showAudio && !annotating,
@@ -302,6 +371,22 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
         }
     }
 
+    if (showTuner) TunerDialog(onDismiss = { showTuner = false })
+    newLinkDest?.let { (from, toPage, toY) ->
+        LinkLabelDialog(
+            toPage = toPage,
+            onDismiss = { newLinkDest = null; markup.pendingLinkFrom = null },
+            onCreate = { label -> markup.addLink(from, toPage, toY, label); newLinkDest = null },
+        )
+    }
+    deletingLink?.let { link ->
+        ConfirmDialog(
+            title = "Remove \"${link.label}\" link?", message = "The jump to page ${link.toPage + 1} will be removed.", confirmLabel = "Remove",
+            onDismiss = { deletingLink = null },
+            onConfirm = { markup.deleteLink(link); deletingLink = null },
+        )
+    }
+
     pendingText?.let { (page, x, y) ->
         TextNoteDialog(onDismiss = { pendingText = null }) { text ->
             markup.add(textMarkup(markup, tools, page, x, y, text))
@@ -321,9 +406,14 @@ private fun TopChrome(
     onAnnotate: () -> Unit,
     audioOpen: Boolean,
     onToggleAudio: () -> Unit,
+    onMetronome: () -> Unit,
+    onTuner: () -> Unit,
+    exporting: Boolean,
+    onExport: () -> Unit,
     onMode: (ViewMode) -> Unit,
 ) {
     var modeMenu by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), tonalElevation = 3.dp) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp),
@@ -358,6 +448,21 @@ private fun TopChrome(
                             leadingIcon = { Icon(m.icon(), null) },
                             trailingIcon = { if (m == mode) Icon(Icons.Outlined.Check, null) },
                             onClick = { modeMenu = false; if (m != mode) onMode(m) },
+                        )
+                    }
+                }
+            }
+            if (!annotating) {
+                Box {
+                    IconButton(onClick = { moreMenu = true }) {
+                        if (exporting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Outlined.MoreVert, "More")
+                    }
+                    DropdownMenu(moreMenu, { moreMenu = false }) {
+                        DropdownMenuItem(text = { Text("Metronome") }, leadingIcon = { Icon(MetronomeIcon, null) }, onClick = { moreMenu = false; onMetronome() })
+                        DropdownMenuItem(text = { Text("Tuner") }, leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) }, onClick = { moreMenu = false; onTuner() })
+                        DropdownMenuItem(
+                            text = { Text("Share as PDF (with markings)") }, enabled = !exporting,
+                            leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) }, onClick = { moreMenu = false; onExport() },
                         )
                     }
                 }

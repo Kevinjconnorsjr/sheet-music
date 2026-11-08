@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import com.kevinconnors.scorestand.data.Markup
 import com.kevinconnors.scorestand.data.MarkupDao
 import com.kevinconnors.scorestand.data.MarkupLayer
+import com.kevinconnors.scorestand.data.PageLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -24,6 +25,7 @@ enum class Tool(val label: String) {
     ERASER("Eraser"),
     TEXT("Text"),
     STAMP("Symbols"),
+    LINK("Jump links"),
 }
 
 object Palette {
@@ -37,7 +39,7 @@ object Palette {
         Tool.ERASER -> listOf(0.015f, 0.03f, 0.06f)
         Tool.TEXT -> listOf(0.022f, 0.032f, 0.048f)
         Tool.STAMP -> listOf(0.03f, 0.045f, 0.07f)
-        Tool.PAN -> listOf(0f)
+        Tool.PAN, Tool.LINK -> listOf(0f)
     }
 }
 
@@ -68,6 +70,12 @@ class MarkupSession(
 ) {
     val layers = mutableStateListOf<MarkupLayer>()
     val items = mutableStateListOf<Markup>()
+    val links = mutableStateListOf<PageLink>()
+
+    /** Where a jump link being created starts, until its destination is tapped. */
+    var pendingLinkFrom by mutableStateOf<LinkStart?>(null)
+
+    data class LinkStart(val page: Int, val x: Float, val y: Float)
     var activeLayerId by mutableLongStateOf(0L)
         private set
 
@@ -99,6 +107,27 @@ class MarkupSession(
         layers.addAll(loadedLayers)
         activeLayerId = loadedLayers.first().id
         items.addAll(dao.markups(scoreId))
+        links.addAll(dao.links(scoreId))
+    }
+
+    // ---- jump links ----
+
+    fun addLink(from: LinkStart, toPage: Int, toY: Float, label: String) {
+        pendingLinkFrom = null
+        scope.launch {
+            writeLock.withLock {
+                val link = PageLink(
+                    scoreId = scoreId, fromPage = from.page, fromX = from.x, fromY = from.y,
+                    toPage = toPage, toY = toY, label = label,
+                )
+                links.add(link.copy(id = dao.insertLink(link)))
+            }
+        }
+    }
+
+    fun deleteLink(link: PageLink) {
+        links.removeAll { it.id == link.id }
+        write { dao.deleteLink(link.id) }
     }
 
     fun visibleOn(page: Int): List<Markup> {

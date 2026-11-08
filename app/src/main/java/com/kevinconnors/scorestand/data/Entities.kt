@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -29,6 +30,9 @@ data class Score(
     val lastOpenedAt: Long = 0,
     val lastPage: Int = 0,
     val viewMode: ViewMode = ViewMode.SINGLE,
+    /** Metronome tempo remembered for this piece; 0 = not set yet. */
+    @ColumnInfo(defaultValue = "0") val metronomeBpm: Int = 0,
+    @ColumnInfo(defaultValue = "4") val beatsPerBar: Int = 4,
 ) {
     fun tagList(): List<String> = tags.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 }
