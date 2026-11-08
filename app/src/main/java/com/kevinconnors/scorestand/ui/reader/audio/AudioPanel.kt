@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.automirrored.outlined.KeyboardTab
+import androidx.compose.material.icons.outlined.FiberManualRecord
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Check
@@ -85,6 +88,8 @@ fun AudioPanel(
     currentPage: Int,
     onAddTrack: () -> Unit,
     onClose: () -> Unit,
+    /** Saves a page turn at this moment and turns the page; null where pages don't apply. */
+    onTurnPageHere: (() -> Unit)? = null,
 ) {
     var adjustOpen by rememberSaveable { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), tonalElevation = 3.dp) {
@@ -107,6 +112,7 @@ fun AudioPanel(
             }
             WaveformBar(audio, track)
             Transport(audio, track, currentPage)
+            if (onTurnPageHere != null) PageTurnRow(audio, onTurnPageHere)
             if (adjustOpen) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Adjustments(audio, track)
@@ -313,6 +319,31 @@ private fun SettingRow(label: String, value: String, onReset: (() -> Unit)?, con
         Box(Modifier.width(64.dp)) {
             if (onReset != null) TextButton(onClick = onReset) { Text("Reset") }
         }
+    }
+}
+
+/** Syncing page turns to the recording: one at a time, or recorded live while playing. */
+@Composable
+private fun PageTurnRow(audio: AudioController, onTurnPageHere: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedButton(onClick = onTurnPageHere, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardTab, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Turn page here")
+        }
+        FilterChip(
+            selected = audio.recordTurns,
+            onClick = { audio.recordTurns = !audio.recordTurns },
+            label = { Text(if (audio.recordTurns) "Recording page turns…" else "Record turns") },
+            leadingIcon = { Icon(Icons.Outlined.FiberManualRecord, null, Modifier.size(16.dp), tint = if (audio.recordTurns) Color(0xFFD32F2F) else LocalContentColor.current) },
+        )
+        Text(
+            if (audio.recordTurns) "Play, and turn pages as you normally would."
+            else "Page turns are saved as markers; “Turn pages” replays them.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

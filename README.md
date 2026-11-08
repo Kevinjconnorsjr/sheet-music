@@ -58,6 +58,17 @@ and practise along with attached audio tracks.
 - Marks are stored separately from the PDF (the original file is never changed) and scale with
   the page in every layout. Half-page mode shows whole pages while you're marking up.
 
+**MusicXML scores: transpose and play back**
+- Import `.musicxml`, `.mxl` or MusicXML `.xml` files (from MuseScore, Finale, Sibelius, Dorico,
+  or a PDF converted with a music-recognition tool such as Audiveris). They're shown as live,
+  engraved notation — pinch to zoom
+- **Transpose** to any key (±12 semitones): notes and key signatures change; saved per score
+- **Play it** as MIDI with a cursor that follows the music; start from any bar; tempo 25–200%;
+  hear all parts, mute parts or play one part alone; use the score's instruments or piano,
+  choir, strings, organ, flute or "oohs"
+- **Share MIDI file** (score menu): exports the music, in the chosen key, as a `.mid`
+- Repeats are played straight through. Markings and page tools apply to PDF scores only
+
 **Audio tracks** (tap 🎧 in the reader)
 - Attach any number of recordings (MP3, M4A/AAC, WAV, FLAC, OGG…) to a score; switch,
   rename or remove them from the track menu
@@ -67,6 +78,9 @@ and practise along with attached audio tracks.
 - **Pitch** in semitones (♭/♯) plus ±50 cent fine-tuning, without changing speed
 - **Pan** left/right (works on mono recordings too) and **volume**
 - **A–B repeat**: tap *Set A* and *Set B* while listening; toggle or clear the loop
+- **Page turns synced to the recording**: tap **Turn page here** at the moment the page should
+  turn, or switch on **Record turns**, press play and turn pages as you normally would — each turn
+  is saved. With **Turn pages** on, playback turns the pages for you from then on
 - **Markers**: drop a marker at the current moment; it's linked to the page you're on.
   With **Turn pages** on, the score jumps to that page when playback reaches the marker
   (long-press a marker to rename, re-link or delete it)
@@ -144,6 +158,8 @@ the old one (you'd back up, uninstall, reinstall and restore).
 ## Tech
 
 Kotlin · Jetpack Compose (Material 3) · Room · Navigation Compose · Android `PdfRenderer` ·
+[OpenSheetMusicDisplay](https://opensheetmusicdisplay.org) (BSD-3-Clause, bundled in
+`app/src/main/assets/notation`) for notation · Android's built-in General MIDI synth ·
 Media3 ExoPlayer (speed/pitch via its Sonic processor, plus a custom pan processor).
 Min SDK 26 (Android 8.0), target SDK 35. All data stays on the device: score files live in
 the app's private storage and the original files are never modified.

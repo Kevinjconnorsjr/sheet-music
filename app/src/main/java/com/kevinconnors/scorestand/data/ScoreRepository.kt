@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import com.kevinconnors.scorestand.audio.Waveform
+import com.kevinconnors.scorestand.notation.MusicXml
 import com.kevinconnors.scorestand.render.PageSources
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,7 +37,8 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
         val resolver = context.contentResolver
         val displayName = queryDisplayName(uri) ?: uri.lastPathSegment ?: "Untitled"
         val mimeType = detectMimeType(uri, displayName)
-            ?: throw IOException("\"$displayName\" isn't a PDF or image")
+            ?: throw IOException("\"$displayName\" isn't a PDF, image or MusicXML file")
+        if (mimeType == MusicXml.MIME) return@withContext importMusicXml(uri, displayName)
 
         val ext = if (mimeType == PDF) "pdf" else
             MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "img"
@@ -66,6 +68,31 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
             throw IOException("Couldn't open \"$displayName\" (${e.message ?: e.javaClass.simpleName})", e)
         }
     }
+
+    /** Stores MusicXML (unpacking .mxl) as plain text and reads its title, composer and bars. */
+    private suspend fun importMusicXml(uri: Uri, displayName: String): Score {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IOException("Can't read \"$displayName\"")
+        val parsed = try {
+            val text = MusicXml.readText(bytes)
+            text to MusicXml.parse(text)
+        } catch (e: Exception) {
+            throw IOException("\"$displayName\" isn't a readable MusicXML score (${e.message ?: e.javaClass.simpleName})", e)
+        }
+        val target = File(scoresDir, "${UUID.randomUUID()}.musicxml")
+        target.writeText(parsed.first)
+        val info = parsed.second
+        val score = Score(
+            title = info.title ?: prettifyTitle(displayName),
+            composer = info.composer.orEmpty(),
+            fileName = target.name,
+            mimeType = MusicXml.MIME,
+            pageCount = info.measureStarts.size,
+        )
+        return score.copy(id = scoreDao.insert(score))
+    }
+
+    fun readNotation(score: Score): String = fileFor(score).readText()
 
     suspend fun update(score: Score) = scoreDao.update(score)
 
@@ -146,7 +173,10 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
     }
 
     private fun detectMimeType(uri: Uri, name: String): String? {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        if (ext in setOf("musicxml", "mxl")) return MusicXml.MIME
         val reported = context.contentResolver.getType(uri)
+        if (reported != null && "musicxml" in reported) return MusicXml.MIME
         if (reported == PDF || reported?.startsWith("image/") == true) return reported
         val byExt = MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
         if (byExt == PDF || byExt?.startsWith("image/") == true) return byExt
@@ -157,7 +187,14 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
         } catch (_: Exception) {
             0
         }
-        return if (read == 4 && String(header, Charsets.US_ASCII) == "%PDF") PDF else null
+        if (read == 4 && String(header, Charsets.US_ASCII) == "%PDF") return PDF
+        // Plain .xml files: check whether it's a MusicXML score.
+        val start = try {
+            context.contentResolver.openInputStream(uri)?.use { s -> ByteArray(4096).let { b -> String(b, 0, s.read(b).coerceAtLeast(0)) } }.orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        return if (MusicXml.looksLikeMusicXml(start)) MusicXml.MIME else null
     }
 
     private fun prettifyTitle(name: String): String =

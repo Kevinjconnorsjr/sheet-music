@@ -42,6 +42,12 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
     var positionMs by mutableLongStateOf(0L)
         private set
     var followPages by mutableStateOf(true)
+
+    /**
+     * While on, every page turn made during playback is saved as a marker at that moment, so
+     * later playbacks turn the pages by themselves. Existing markers don't turn pages meanwhile.
+     */
+    var recordTurns by mutableStateOf(false)
     var busy by mutableStateOf(false)
         private set
 
@@ -117,7 +123,7 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
         player.seekTo(target)
         positionMs = target
         lastPosition = target
-        if (followPages) markers.lastOrNull { it.page >= 0 && it.positionMs <= target }?.let { pageRequests.tryEmit(it.page) }
+        if (followPages && !recordTurns) markers.lastOrNull { it.page >= 0 && it.positionMs <= target }?.let { pageRequests.tryEmit(it.page) }
     }
 
     fun skip(deltaMs: Long) = seekTo(player.positionMs + deltaMs)
@@ -188,6 +194,13 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
         persist.launch { repo.audioDao.insertMarker(AudioMarker(trackId = t.id, positionMs = pos, label = label, page = page)) }
     }
 
+    /** Saves "turn to [page]" at the current playback moment. */
+    fun addPageTurn(page: Int) {
+        val t = current ?: return
+        val pos = player.positionMs
+        persist.launch { repo.audioDao.insertMarker(AudioMarker(trackId = t.id, positionMs = pos, label = "Page ${page + 1}", page = page)) }
+    }
+
     fun renameMarker(marker: AudioMarker, label: String) = persist.launch { repo.audioDao.updateMarker(marker.copy(label = label.trim())) }
     fun linkMarker(marker: AudioMarker, page: Int) = persist.launch { repo.audioDao.updateMarker(marker.copy(page = page)) }
     fun deleteMarker(marker: AudioMarker) = persist.launch { repo.audioDao.deleteMarker(marker.id) }
@@ -239,7 +252,7 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
                     delay(25)
                     continue
                 }
-                if (followPages && pos > lastPosition) {
+                if (followPages && !recordTurns && pos > lastPosition) {
                     markers.lastOrNull { it.page >= 0 && it.positionMs > lastPosition && it.positionMs <= pos }
                         ?.let { pageRequests.tryEmit(it.page) }
                 }

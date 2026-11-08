@@ -104,6 +104,7 @@ import com.kevinconnors.scorestand.ui.reader.markup.LinkLabelDialog
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupOverlay
 import com.kevinconnors.scorestand.ui.reader.markup.MarkupSession
 import com.kevinconnors.scorestand.ui.tools.MetronomeIcon
+import com.kevinconnors.scorestand.ui.notation.NotationContent
 import com.kevinconnors.scorestand.ui.tools.KeyboardPanel
 import com.kevinconnors.scorestand.ui.tools.MetronomePanel
 import com.kevinconnors.scorestand.ui.tools.TunerDialog
@@ -129,6 +130,7 @@ fun ReaderScreen(scoreId: Long, setlistId: Long, setlistIndex: Int, onBack: () -
     Box(Modifier.fillMaxSize().background(ReaderBackground), contentAlignment = Alignment.Center) {
         when {
             vm.error != null -> Text(vm.error!!, color = Color.White, modifier = Modifier.padding(32.dp))
+            vm.notation != null -> key(vm.notation!!.score.id) { NotationContent(vm, vm.notation!!, onBack) }
             loaded == null -> CircularProgressIndicator()
             else -> key(loaded.score.id) { ReaderContent(vm, loaded, onBack) }
         }
@@ -198,9 +200,23 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     }
 
     // Markers linked to pages turn the music as the recording plays.
+    var autoTurning by remember { mutableStateOf(false) }
     LaunchedEffect(controller) {
         val c = controller ?: return@LaunchedEffect
-        audio.pageRequests.collect { page -> if (page < pageCount && page != c.currentPage) c.jumpTo(page) }
+        audio.pageRequests.collect { page ->
+            if (page < pageCount && page != c.currentPage) {
+                autoTurning = true
+                try { c.jumpTo(page) } finally { autoTurning = false }
+            }
+        }
+    }
+    // "Record turns": the user's own page turns during playback become markers.
+    var recordedPage by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(controller) {
+        snapshotFlow { controller?.currentPage }.filterNotNull().distinctUntilChanged().collect { page ->
+            if (audio.recordTurns && audio.isPlaying && !autoTurning && recordedPage >= 0 && page != recordedPage) audio.addPageTurn(page)
+            recordedPage = page
+        }
     }
     LaunchedEffect(Unit) {
         audio.messages.collect { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
@@ -411,6 +427,14 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                     currentPage = controller?.currentPage ?: lastKnownPage,
                     onAddTrack = { audioPicker.launch(arrayOf("audio/*")) },
                     onClose = { showAudio = false },
+                    onTurnPageHere = {
+                        val page = controller?.currentPage ?: lastKnownPage
+                        if (page + 1 < pageCount) {
+                            audio.addPageTurn(page + 1)
+                            recordedPage = page + 1 // don't record this turn twice
+                            scope.launch { controller?.jumpTo(page + 1) }
+                        }
+                    },
                 )
             }
             AnimatedVisibility(

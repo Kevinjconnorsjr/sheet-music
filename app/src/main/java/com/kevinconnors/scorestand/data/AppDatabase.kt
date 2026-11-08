@@ -9,13 +9,14 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [Score::class, Setlist::class, SetlistEntry::class, MarkupLayer::class, Markup::class, AudioTrack::class, AudioMarker::class, PageLink::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), // adds markup layers + markups
         AutoMigration(from = 2, to = 3), // adds audio tracks + markers
         AutoMigration(from = 3, to = 4), // adds page links + per-score metronome settings
         AutoMigration(from = 4, to = 5), // adds per-score "trim margins"
+        AutoMigration(from = 5, to = 6), // adds MusicXML transposition
     ],
 )
 @TypeConverters(Converters::class)

@@ -13,6 +13,9 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.FileProvider
+import com.kevinconnors.scorestand.notation.MidiWriter
+import com.kevinconnors.scorestand.notation.MusicXml
+import com.kevinconnors.scorestand.notation.PlaybackOptions
 import com.kevinconnors.scorestand.render.PageSources
 import com.kevinconnors.scorestand.ui.reader.markup.buildInkPath
 import com.kevinconnors.scorestand.ui.reader.markup.drawMarkup
@@ -58,10 +61,19 @@ class ScoreExporter(private val context: Context, private val repo: ScoreReposit
         out
     }
 
+    /** Writes a MusicXML score's playback (with its saved transposition) as a .mid file. */
+    suspend fun exportMidi(score: Score): File = withContext(Dispatchers.IO) {
+        val parsed = MusicXml.parse(repo.readNotation(score))
+        val dir = File(context.cacheDir, "exports").apply { deleteRecursively(); mkdirs() }
+        File(dir, safeName(score.title) + ".mid").apply {
+            writeBytes(MidiWriter.write(parsed, PlaybackOptions(transpose = score.transposeSemitones)))
+        }
+    }
+
     fun shareIntent(file: File): Intent {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
+            type = if (file.extension == "mid") "audio/midi" else "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
