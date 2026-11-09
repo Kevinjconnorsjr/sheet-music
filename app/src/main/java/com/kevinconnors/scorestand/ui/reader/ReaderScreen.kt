@@ -427,6 +427,7 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
                     currentPage = controller?.currentPage ?: lastKnownPage,
                     onAddTrack = { audioPicker.launch(arrayOf("audio/*")) },
                     onClose = { showAudio = false },
+                    pageCount = pageCount,
                     onTurnPageHere = {
                         val page = controller?.currentPage ?: lastKnownPage
                         if (page + 1 < pageCount) {

@@ -90,7 +90,10 @@ fun AudioPanel(
     onClose: () -> Unit,
     /** Saves a page turn at this moment and turns the page; null where pages don't apply. */
     onTurnPageHere: (() -> Unit)? = null,
+    pageCount: Int = 0,
 ) {
+    var editingTurns by remember { mutableStateOf(false) }
+    if (editingTurns) PageTurnEditor(audio, pageCount, onClose = { editingTurns = false })
     var adjustOpen by rememberSaveable { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -112,7 +115,7 @@ fun AudioPanel(
             }
             WaveformBar(audio, track)
             Transport(audio, track, currentPage)
-            if (onTurnPageHere != null) PageTurnRow(audio, onTurnPageHere)
+            if (onTurnPageHere != null) PageTurnRow(audio, onTurnPageHere, onEdit = { editingTurns = true })
             if (adjustOpen) {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Adjustments(audio, track)
@@ -324,7 +327,7 @@ private fun SettingRow(label: String, value: String, onReset: (() -> Unit)?, con
 
 /** Syncing page turns to the recording: one at a time, or recorded live while playing. */
 @Composable
-private fun PageTurnRow(audio: AudioController, onTurnPageHere: () -> Unit) {
+private fun PageTurnRow(audio: AudioController, onTurnPageHere: () -> Unit, onEdit: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
@@ -332,6 +335,12 @@ private fun PageTurnRow(audio: AudioController, onTurnPageHere: () -> Unit) {
     ) {
         OutlinedButton(onClick = onTurnPageHere, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
             Icon(Icons.AutoMirrored.Outlined.KeyboardTab, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Turn page here")
+        }
+        val turns = audio.pageTurns.size
+        if (turns > 0) {
+            OutlinedButton(onClick = onEdit, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
+                Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Edit turns ($turns)")
+            }
         }
         FilterChip(
             selected = audio.recordTurns,

@@ -81,6 +81,9 @@ and practise along with attached audio tracks.
 - **Page turns synced to the recording**: tap **Turn page here** at the moment the page should
   turn, or switch on **Record turns**, press play and turn pages as you normally would — each turn
   is saved. With **Turn pages** on, playback turns the pages for you from then on
+- **Edit turns**: a list of every recorded turn with its exact time (to a tenth of a second);
+  nudge each one earlier/later, set it to the moment now playing, change the page it turns to,
+  play from just before it to check, or remove it. **Shift all** moves every turn at once
 - **Markers**: drop a marker at the current moment; it's linked to the page you're on.
   With **Turn pages** on, the score jumps to that page when playback reaches the marker
   (long-press a marker to rename, re-link or delete it)

@@ -205,6 +205,42 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
     fun linkMarker(marker: AudioMarker, page: Int) = persist.launch { repo.audioDao.updateMarker(marker.copy(page = page)) }
     fun deleteMarker(marker: AudioMarker) = persist.launch { repo.audioDao.deleteMarker(marker.id) }
 
+    // ---- editing recorded page turns ----
+
+    val pageTurns: List<AudioMarker> get() = markers.filter { it.page >= 0 }.sortedBy { it.positionMs }
+
+    fun nudgeTurn(marker: AudioMarker, deltaMs: Long) = saveMarker(PageTurns.moved(marker, deltaMs, durationMs))
+    fun setTurnTime(marker: AudioMarker, positionMs: Long) = saveMarker(PageTurns.at(marker, positionMs, durationMs))
+    fun setTurnPage(marker: AudioMarker, page: Int, pageCount: Int) = saveMarker(PageTurns.toPage(marker, page, pageCount))
+
+    fun shiftAllTurns(deltaMs: Long) {
+        val shifted = PageTurns.shiftedAll(markers, deltaMs, durationMs)
+        applyLocally(shifted)
+        persist.launch { shifted.forEach { repo.audioDao.updateMarker(it) } }
+    }
+
+    fun clearAllTurns() {
+        val turns = pageTurns
+        markers = markers.filter { it.page < 0 }
+        persist.launch { turns.forEach { repo.audioDao.deleteMarker(it.id) } }
+    }
+
+    /** Plays from a few seconds before a turn, to check its timing. */
+    fun previewTurn(marker: AudioMarker) {
+        seekTo((marker.positionMs - 3_000).coerceAtLeast(0))
+        play()
+    }
+
+    private fun saveMarker(updated: AudioMarker) {
+        applyLocally(listOf(updated)) // show the change at once; the database follows
+        persist.launch { repo.audioDao.updateMarker(updated) }
+    }
+
+    private fun applyLocally(updated: List<AudioMarker>) {
+        val byId = updated.associateBy { it.id }
+        markers = markers.map { byId[it.id] ?: it }.sortedBy { it.positionMs }
+    }
+
     // ---- tracks ----
 
     fun importTrack(uri: Uri) {
