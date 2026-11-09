@@ -17,6 +17,10 @@ and practise along with attached audio tracks.
 **Library**
 - Import PDFs and images (photos or scans of sheet music) with the **Import** button, or
   by opening/sharing a PDF to ScoreStand from another app
+- **Recordings come along with the music**: in Import, pick the sheet music *and* its audio
+  files together and the recordings are saved with that score (with several scores, you're
+  asked which one they belong to). Importing just a score offers **Add audio tracks** right
+  after; any score's long-press menu has **Add audio tracks…** too
 - Grid of scores with thumbnails, title, composer and page count
 - Search (title, composer, tags), tag filter chips, and sorting by title, composer,
   recently opened or recently added
@@ -70,7 +74,8 @@ and practise along with attached audio tracks.
 - Repeats are played straight through. Markings and page tools apply to PDF scores only
 
 **Audio tracks** (tap 🎧 in the reader)
-- Attach any number of recordings (MP3, M4A/AAC, WAV, FLAC, OGG…) to a score; switch,
+- Attach any number of recordings (MP3, M4A/AAC, WAV, FLAC, OGG…) to a score — several at once
+  from the file picker; switch,
   rename or remove them from the track menu
 - Waveform you can tap or drag to seek; ±5 s skip; play/pause from headphone or Bluetooth
   media buttons

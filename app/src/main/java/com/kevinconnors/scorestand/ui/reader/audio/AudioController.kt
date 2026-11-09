@@ -243,14 +243,20 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
 
     // ---- tracks ----
 
-    fun importTrack(uri: Uri) {
+    /** Adds one or more recordings to this score and selects the first new one. */
+    fun importTracks(uris: List<Uri>) {
         val id = scoreId.takeIf { it > 0 } ?: return
+        if (uris.isEmpty()) return
         scope.launch {
             busy = true
             try {
-                select(repo.importAudio(id, uri))
-            } catch (e: Exception) {
-                messages.tryEmit(e.message ?: "Couldn't add that file")
+                val (added, errors) = repo.importAudio(id, uris)
+                added.firstOrNull()?.let { select(it) }
+                when {
+                    errors.isEmpty() && added.size > 1 -> messages.tryEmit("Added ${added.size} tracks")
+                    errors.isNotEmpty() && added.isEmpty() -> messages.tryEmit(errors.first())
+                    errors.isNotEmpty() -> messages.tryEmit("Added ${added.size}, ${errors.size} failed: ${errors.first()}")
+                }
             } finally {
                 busy = false
             }

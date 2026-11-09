@@ -162,8 +162,8 @@ private fun ReaderContent(vm: ReaderViewModel, loaded: ReaderViewModel.Loaded, o
     var pendingText by remember { mutableStateOf<Triple<Int, Float, Float>?>(null) }
     val audio = vm.audio
     var showAudio by rememberSaveable { mutableStateOf(false) }
-    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { audio.importTrack(it); showAudio = true }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) { vm.audio.importTracks(uris); showAudio = true }
     }
     val context = LocalContext.current
     var showMetronome by rememberSaveable { mutableStateOf(false) }
