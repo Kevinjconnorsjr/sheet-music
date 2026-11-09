@@ -17,6 +17,10 @@ and practise along with attached audio tracks.
 **Library**
 - Import PDFs and images (photos or scans of sheet music) with the **Import** button, or
   by opening/sharing a PDF to ScoreStand from another app
+- **Recordings come along with the music**: in Import, pick the sheet music *and* its audio
+  files together and the recordings are saved with that score (with several scores, you're
+  asked which one they belong to). Importing just a score offers **Add audio tracks** right
+  after; any score's long-press menu has **Add audio tracks…** too
 - Grid of scores with thumbnails, title, composer and page count
 - Search (title, composer, tags), tag filter chips, and sorting by title, composer,
   recently opened or recently added
@@ -70,7 +74,8 @@ and practise along with attached audio tracks.
 - Repeats are played straight through. Markings and page tools apply to PDF scores only
 
 **Audio tracks** (tap 🎧 in the reader)
-- Attach any number of recordings (MP3, M4A/AAC, WAV, FLAC, OGG…) to a score; switch,
+- Attach any number of recordings (MP3, M4A/AAC, WAV, FLAC, OGG…) to a score — several at once
+  from the file picker; switch,
   rename or remove them from the track menu
 - Waveform you can tap or drag to seek; ±5 s skip; play/pause from headphone or Bluetooth
   media buttons
@@ -81,6 +86,9 @@ and practise along with attached audio tracks.
 - **Page turns synced to the recording**: tap **Turn page here** at the moment the page should
   turn, or switch on **Record turns**, press play and turn pages as you normally would — each turn
   is saved. With **Turn pages** on, playback turns the pages for you from then on
+- **Edit turns**: a list of every recorded turn with its exact time (to a tenth of a second);
+  nudge each one earlier/later, set it to the moment now playing, change the page it turns to,
+  play from just before it to check, or remove it. **Shift all** moves every turn at once
 - **Markers**: drop a marker at the current moment; it's linked to the page you're on.
   With **Turn pages** on, the score jumps to that page when playback reaches the marker
   (long-press a marker to rename, re-link or delete it)

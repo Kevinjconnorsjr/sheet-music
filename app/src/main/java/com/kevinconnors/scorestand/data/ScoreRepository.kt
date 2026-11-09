@@ -148,6 +148,28 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
         }
     }
 
+    /** True for recordings (by type or file extension), so mixed selections can be sorted. */
+    fun isAudio(uri: Uri): Boolean {
+        val type = context.contentResolver.getType(uri)
+        if (type != null && type.startsWith("audio/") && "midi" !in type) return true
+        val ext = (queryDisplayName(uri) ?: uri.lastPathSegment ?: "").substringAfterLast('.', "").lowercase()
+        return ext in AUDIO_EXTENSIONS
+    }
+
+    /** Attaches several recordings to a score; returns the added tracks and any error messages. */
+    suspend fun importAudio(scoreId: Long, uris: List<Uri>): Pair<List<AudioTrack>, List<String>> {
+        val added = mutableListOf<AudioTrack>()
+        val errors = mutableListOf<String>()
+        for (uri in uris) {
+            try {
+                added += importAudio(scoreId, uri)
+            } catch (e: Exception) {
+                errors += e.message ?: "Couldn't add a track"
+            }
+        }
+        return added to errors
+    }
+
     suspend fun deleteTrack(track: AudioTrack) {
         audioDao.deleteTrack(track.id)
         withContext(Dispatchers.IO) { deleteAudioFiles(track) }
@@ -202,6 +224,7 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
 
     companion object {
         const val PDF = "application/pdf"
+        private val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "amr", "3gp", "wma", "aiff", "aif")
         private const val THUMB_WIDTH = 360
     }
 }

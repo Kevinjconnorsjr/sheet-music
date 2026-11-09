@@ -170,8 +170,8 @@ fun NotationContent(vm: ReaderViewModel, doc: ReaderViewModel.NotationDoc, onBac
         }
     }
 
-    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { vm.audio.importTrack(it); showAudio = true }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) { vm.audio.importTracks(uris); showAudio = true }
     }
 
     Box(Modifier.fillMaxSize().background(Color.White)) {

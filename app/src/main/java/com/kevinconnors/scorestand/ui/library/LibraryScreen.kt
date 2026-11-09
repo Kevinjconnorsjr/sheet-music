@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PictureAsPdf
@@ -106,6 +107,23 @@ fun LibraryScreen(
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    // Recordings for a score: chosen from its menu or offered right after importing it.
+    var tracksFor by remember { mutableStateOf<Score?>(null) }
+    val trackPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        tracksFor?.let { vm.attachTracks(it, uris) }
+        tracksFor = null
+    }
+    val launchTrackPicker: (Score) -> Unit = { score -> tracksFor = score; trackPicker.launch(arrayOf("audio/*")) }
+    LaunchedEffect(Unit) {
+        vm.trackOffers.collect { score ->
+            val result = snackbar.showSnackbar(
+                "Added \"${score.title}\"", actionLabel = "Add audio tracks", withDismissAction = true,
+                duration = androidx.compose.material3.SnackbarDuration.Long,
+            )
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) launchTrackPicker(score)
+        }
+    }
+    val pendingTracks by vm.pendingTracks.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.shares.collect { context.startActivity(it) } }
     var moreMenu by remember { mutableStateOf(false) }
     var showTuner by remember { mutableStateOf(false) }
@@ -188,6 +206,8 @@ fun LibraryScreen(
                             "application/pdf", "image/*",
                             "application/vnd.recordare.musicxml+xml", "application/vnd.recordare.musicxml",
                             "application/xml", "text/xml", "application/octet-stream", "application/zip",
+                            // Recordings picked together with a score are saved with it.
+                            "audio/*",
                         ))
                     },
                     icon = { Icon(Icons.Outlined.UploadFile, null) },
@@ -212,6 +232,7 @@ fun LibraryScreen(
                     tagFilter = tagFilter,
                     filtering = query.isNotBlank() || tagFilter != null,
                     onOpen = onOpenScore,
+                    onAddTracks = launchTrackPicker,
                 )
             } else {
                 SetlistsTab(setlists, onOpenSetlist)
@@ -220,6 +241,25 @@ fun LibraryScreen(
     }
 
     if (showTuner) TunerDialog(onDismiss = { showTuner = false })
+    pendingTracks?.let { (scores, uris) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.pendingTracks.value = null },
+            title = { Text("Which score are the ${uris.size} recording${if (uris.size == 1) "" else "s"} for?") },
+            text = {
+                LazyColumn {
+                    items(scores, key = { it.id }) { s ->
+                        ListItem(
+                            headlineContent = { Text(s.title) },
+                            supportingContent = { if (s.composer.isNotBlank()) Text(s.composer) },
+                            modifier = Modifier.clickable { vm.pendingTracks.value = null; vm.attachTracks(s, uris) },
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { vm.pendingTracks.value = null }) { Text("Skip") } },
+        )
+    }
     restoreUri?.let { uri ->
         ConfirmDialog(
             title = "Restore this backup?",
@@ -247,6 +287,7 @@ private fun ScoresTab(
     tagFilter: String?,
     filtering: Boolean,
     onOpen: (Long) -> Unit,
+    onAddTracks: (Score) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Score?>(null) }
     var deleting by remember { mutableStateOf<Score?>(null) }
@@ -290,6 +331,7 @@ private fun ScoresTab(
                         onDelete = { deleting = score },
                         onAddToSetlist = { addingToSetlist = score },
                         onShare = { vm.exportPdf(score) },
+                        onAddTracks = { onAddTracks(score) },
                     )
                 }
             }
@@ -335,6 +377,7 @@ private fun ScoreCard(
     onDelete: () -> Unit,
     onAddToSetlist: () -> Unit,
     onShare: () -> Unit,
+    onAddTracks: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box {
@@ -350,6 +393,7 @@ private fun ScoreCard(
         }
         DropdownMenu(menu, { menu = false }) {
             DropdownMenuItem(text = { Text("Edit details") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
+            DropdownMenuItem(text = { Text("Add audio tracks…") }, leadingIcon = { Icon(Icons.Outlined.Headphones, null) }, onClick = { menu = false; onAddTracks() })
             DropdownMenuItem(text = { Text("Add to setlist") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; onAddToSetlist() })
             DropdownMenuItem(
                 text = { Text(if (score.isNotation()) "Share MIDI file" else "Share as PDF") },

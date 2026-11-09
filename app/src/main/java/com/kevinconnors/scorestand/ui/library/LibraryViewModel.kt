@@ -69,25 +69,72 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun thumbnailFor(score: Score) = repo.thumbnailFor(score)
 
+    /** A single new score with no recordings yet — the screen offers to add some. */
+    private val trackOfferChannel = Channel<Score>(Channel.BUFFERED)
+    val trackOffers = trackOfferChannel.receiveAsFlow()
+
+    /** Recordings picked along with several scores: the screen asks which score they belong to. */
+    val pendingTracks = MutableStateFlow<Pair<List<Score>, List<Uri>>?>(null)
+
+    /**
+     * Imports a selection that may mix sheet music and recordings. With one score, the recordings
+     * are attached to it; with several, the user is asked which score they go with.
+     */
     fun import(uris: List<Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
             importing.value = true
-            var ok = 0
+            val (audio, scores) = uris.partition { repo.isAudio(it) }
+            val added = mutableListOf<Score>()
             val errors = mutableListOf<String>()
-            for (uri in uris) {
+            for (uri in scores) {
                 try {
-                    repo.import(uri); ok++
+                    added += repo.import(uri)
                 } catch (e: Exception) {
                     errors += e.message ?: "Import failed"
                 }
             }
-            importing.value = false
             when {
-                errors.isEmpty() -> messageChannel.send("Added $ok score${if (ok == 1) "" else "s"}")
-                ok == 0 -> messageChannel.send(errors.first())
-                else -> messageChannel.send("Added $ok, ${errors.size} failed: ${errors.first()}")
+                audio.isEmpty() -> {
+                    importing.value = false
+                    when {
+                        errors.isEmpty() && added.size == 1 -> trackOfferChannel.send(added.single())
+                        errors.isEmpty() -> messageChannel.send("Added ${added.size} scores")
+                        added.isEmpty() -> messageChannel.send(errors.first())
+                        else -> messageChannel.send("Added ${added.size}, ${errors.size} failed: ${errors.first()}")
+                    }
+                }
+                added.size == 1 -> {
+                    val (tracks, trackErrors) = repo.importAudio(added.single().id, audio)
+                    importing.value = false
+                    val all = errors + trackErrors
+                    val summary = "Added \"${added.single().title}\" with ${tracks.size} track${if (tracks.size == 1) "" else "s"}"
+                    messageChannel.send(if (all.isEmpty()) summary else "$summary. ${all.size} failed: ${all.first()}")
+                }
+                added.isEmpty() -> {
+                    importing.value = false
+                    messageChannel.send(
+                        if (errors.isNotEmpty()) errors.first()
+                        else "Pick the sheet music together with its recordings, or use “Add audio tracks” on a score"
+                    )
+                }
+                else -> {
+                    importing.value = false
+                    pendingTracks.value = added.toList() to audio
+                }
             }
+        }
+    }
+
+    /** Attaches recordings to an existing score (from its menu or the post-import offer). */
+    fun attachTracks(score: Score, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            importing.value = true
+            val (tracks, errors) = repo.importAudio(score.id, uris)
+            importing.value = false
+            val summary = "Added ${tracks.size} track${if (tracks.size == 1) "" else "s"} to \"${score.title}\""
+            messageChannel.send(if (errors.isEmpty()) summary else if (tracks.isEmpty()) errors.first() else "$summary. ${errors.size} failed: ${errors.first()}")
         }
     }
 
