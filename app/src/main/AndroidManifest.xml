@@ -53,6 +53,19 @@
                 <data android:mimeType="application/vnd.recordare.musicxml+xml" />
                 <data android:mimeType="application/vnd.recordare.musicxml" />
             </intent-filter>
+            <!-- Recordings, alone or shared together with their sheet music. A mixed selection
+                 (PDF + MP3s) arrives with a generic type, hence */* for multiple files. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -25,6 +25,13 @@ and practise along with attached audio tracks.
 - Search (title, composer, tags), tag filter chips, and sorting by title, composer,
   recently opened or recently added
 - Long-press a score to edit details, add it to a setlist, or delete it
+- **Long names** (library ⋮): *Wrap* shows every name in full (default); *Shorten in the middle*
+  keeps names on one line as `Everybody Loves So…Tenor predominant`, so the start and the end
+  both show. Applies to scores, setlists, audio tracks and markers
+- **Sharing from Google Drive**: Android's file picker doesn't show Drive folder shortcuts, but
+  the Drive app does — select the PDF and its recordings there, then *Share → Send a copy →
+  ScoreStand*. They're saved as one score with its tracks; recordings shared on their own ask
+  which score they belong to
 
 **Setlists**
 - Create, rename and delete setlists; add scores; reorder; remove

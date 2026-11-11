@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.ui.setlist
 
+import com.kevinconnors.scorestand.ui.TitleText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +80,7 @@ fun SetlistScreen(setlistId: Long, onBack: () -> Unit, onPlay: (scoreId: Long, i
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(setlist?.name ?: "") },
+                title = { TitleText(setlist?.name ?: "") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
                 actions = {
                     IconButton(enabled = items.isNotEmpty(), onClick = { onPlay(items.first().score.id, 0) }) {
@@ -114,7 +115,7 @@ fun SetlistScreen(setlistId: Long, onBack: () -> Unit, onPlay: (scoreId: Long, i
                                 ScoreThumbnail(vm.thumbnailFor(item.score), Modifier.size(40.dp, 52.dp).clip(RoundedCornerShape(4.dp)))
                             }
                         },
-                        headlineContent = { Text(item.score.title) },
+                        headlineContent = { TitleText(item.score.title) },
                         supportingContent = { if (item.score.composer.isNotBlank()) Text(item.score.composer) },
                         trailingContent = {
                             Row {
@@ -160,7 +161,7 @@ private fun AddScoresDialog(scores: List<Score>, onDismiss: () -> Unit, onAdd: (
                     items(scores, key = { it.id }) { s ->
                         val checked = s.id in selected
                         ListItem(
-                            headlineContent = { Text(s.title) },
+                            headlineContent = { TitleText(s.title) },
                             supportingContent = { if (s.composer.isNotBlank()) Text(s.composer) },
                             leadingContent = { Checkbox(checked, null) },
                             modifier = Modifier.clickable { if (checked) selected.remove(s.id) else selected.add(s.id) },

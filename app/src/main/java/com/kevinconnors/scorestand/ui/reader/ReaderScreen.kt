@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.ui.reader
 
+import com.kevinconnors.scorestand.ui.TitleText
 import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -512,7 +513,7 @@ private fun TopChrome(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TitleText(title, style = MaterialTheme.typography.titleMedium)
                 val sub = if (vm.inSetlist) {
                     "${vm.setlistName ?: "Setlist"} · ${vm.setlistIndex + 1} of ${vm.setlistItems.size}"
                 } else composer
