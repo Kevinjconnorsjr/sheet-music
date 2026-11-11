@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.ui.library
 
+import com.kevinconnors.scorestand.ui.TitleText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -124,8 +125,18 @@ fun LibraryScreen(
         }
     }
     val pendingTracks by vm.pendingTracks.collectAsStateWithLifecycle()
+    val app = context.applicationContext as com.kevinconnors.scorestand.ScoreStandApp
+    LaunchedEffect(Unit) {
+        app.incomingFiles.collect { uris ->
+            if (uris != null) {
+                app.incomingFiles.value = null
+                vm.import(uris)
+            }
+        }
+    }
     LaunchedEffect(Unit) { vm.shares.collect { context.startActivity(it) } }
     var moreMenu by remember { mutableStateOf(false) }
+    val titleDisplay = com.kevinconnors.scorestand.ui.LocalTitleDisplay.current
     var showTuner by remember { mutableStateOf(false) }
     var restoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val backupPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -167,6 +178,16 @@ fun LibraryScreen(
                             IconButton(onClick = { moreMenu = true }) { Icon(Icons.Outlined.MoreVert, "More") }
                             DropdownMenu(moreMenu, { moreMenu = false }) {
                                 DropdownMenuItem(text = { Text("Tuner") }, leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) }, onClick = { moreMenu = false; showTuner = true })
+                                androidx.compose.material3.HorizontalDivider()
+                                Text("Long names", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
+                                com.kevinconnors.scorestand.data.TitleDisplay.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        leadingIcon = { if (option == titleDisplay) Icon(Icons.Outlined.Check, null) },
+                                        onClick = { moreMenu = false; app.settings.setTitleDisplay(option) },
+                                    )
+                                }
+                                androidx.compose.material3.HorizontalDivider()
                                 DropdownMenuItem(
                                     text = { Text("Back up library…") }, leadingIcon = { Icon(Icons.Outlined.Backup, null) },
                                     onClick = { moreMenu = false; backupPicker.launch("ScoreStand-backup-${java.time.LocalDate.now()}.zip") },
@@ -244,12 +265,12 @@ fun LibraryScreen(
     pendingTracks?.let { (scores, uris) ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { vm.pendingTracks.value = null },
-            title = { Text("Which score are the ${uris.size} recording${if (uris.size == 1) "" else "s"} for?") },
+            title = { Text("Which score ${if (uris.size == 1) "is this recording" else "are these ${uris.size} recordings"} for?") },
             text = {
                 LazyColumn {
                     items(scores, key = { it.id }) { s ->
                         ListItem(
-                            headlineContent = { Text(s.title) },
+                            headlineContent = { TitleText(s.title) },
                             supportingContent = { if (s.composer.isNotBlank()) Text(s.composer) },
                             modifier = Modifier.clickable { vm.pendingTracks.value = null; vm.attachTracks(s, uris) },
                         )
@@ -384,7 +405,7 @@ private fun ScoreCard(
         Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = { menu = true })) {
             ScoreThumbnail(vm.thumbnailFor(score), Modifier.fillMaxWidth().aspectRatio(0.75f))
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                Text(score.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                TitleText(score.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 val size = if (score.isNotation()) "MusicXML · ${score.pageCount} bars" else "${score.pageCount} page${if (score.pageCount == 1) "" else "s"}"
                 val subtitle = listOf(score.composer, size)
                     .filter { it.isNotBlank() }.joinToString(" · ")
@@ -414,7 +435,7 @@ private fun SetlistsTab(setlists: List<SetlistWithCount>, onOpen: (Long) -> Unit
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
         items(setlists, key = { it.setlist.id }) { item ->
             ListItem(
-                headlineContent = { Text(item.setlist.name) },
+                headlineContent = { TitleText(item.setlist.name) },
                 supportingContent = { Text("${item.count} score${if (item.count == 1) "" else "s"}") },
                 leadingContent = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) },
                 modifier = Modifier.clickable { onOpen(item.setlist.id) },

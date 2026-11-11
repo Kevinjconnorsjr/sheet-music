@@ -115,7 +115,7 @@ fun PickSetlistDialog(
                 }
                 items(setlists, key = { it.id }) { s ->
                     ListItem(
-                        headlineContent = { Text(s.name) },
+                        headlineContent = { TitleText(s.name) },
                         leadingContent = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) },
                         modifier = Modifier.clickable { onPick(s) },
                     )

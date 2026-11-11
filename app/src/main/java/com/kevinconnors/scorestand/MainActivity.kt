@@ -1,25 +1,31 @@
 package com.kevinconnors.scorestand
 
+import com.kevinconnors.scorestand.ui.TitleText
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.IntentCompat
-import androidx.lifecycle.lifecycleScope
+import com.kevinconnors.scorestand.ui.LocalTitleDisplay
 import com.kevinconnors.scorestand.ui.AppNavigation
 import com.kevinconnors.scorestand.ui.theme.ScoreStandTheme
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val settings = (application as ScoreStandApp).settings
         setContent {
-            ScoreStandTheme {
-                AppNavigation()
+            val titleDisplay by settings.titleDisplay.collectAsState()
+            CompositionLocalProvider(LocalTitleDisplay provides titleDisplay) {
+                ScoreStandTheme {
+                    AppNavigation()
+                }
             }
         }
         if (savedInstanceState == null) handleIncoming(intent)
@@ -41,22 +47,9 @@ class MainActivity : ComponentActivity() {
             else -> emptyList()
         }
         if (uris.isEmpty()) return
-        val repo = (application as ScoreStandApp).repository
-        lifecycleScope.launch {
-            var ok = 0
-            val errors = mutableListOf<String>()
-            for (uri in uris) {
-                try {
-                    repo.import(uri); ok++
-                } catch (e: Exception) {
-                    errors += e.message ?: "Import failed"
-                }
-            }
-            val msg = buildString {
-                if (ok > 0) append("Added $ok score${if (ok == 1) "" else "s"} to your library")
-                if (errors.isNotEmpty()) { if (ok > 0) append(". "); append(errors.first()) }
-            }
-            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-        }
+        // The library imports them the same way as its Import button: sheet music shared together
+        // with recordings is saved as one score with its tracks, and recordings on their own are
+        // attached to a score the user picks.
+        (application as ScoreStandApp).incomingFiles.value = uris
     }
 }

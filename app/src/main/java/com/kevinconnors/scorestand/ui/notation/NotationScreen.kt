@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.ui.notation
 
+import com.kevinconnors.scorestand.ui.TitleText
 import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.os.Handler
@@ -291,7 +292,7 @@ private fun NotationTopBar(
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TitleText(title, style = MaterialTheme.typography.titleMedium)
                 val sub = if (vm.inSetlist) "${vm.setlistName ?: "Setlist"} · ${vm.setlistIndex + 1} of ${vm.setlistItems.size}" else subtitle
                 if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }

@@ -1,5 +1,6 @@
 package com.kevinconnors.scorestand.ui.reader.audio
 
+import com.kevinconnors.scorestand.ui.TitleText
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -133,13 +134,18 @@ private fun TrackHeader(audio: AudioController, adjustOpen: Boolean, onToggleAdj
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
             TextButton(onClick = { menu = true }) {
-                Text(audio.current?.title ?: "Audio tracks", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 260.dp))
+                TitleText(audio.current?.title ?: "Audio tracks", modifier = Modifier.weight(1f, fill = false))
                 Icon(Icons.Outlined.ArrowDropDown, null)
             }
             DropdownMenu(menu, { menu = false }) {
                 audio.tracks.forEach { t ->
                     DropdownMenuItem(
-                        text = { Text("${t.title}  ·  ${formatTime(t.durationMs)}") },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TitleText(t.title, modifier = Modifier.weight(1f, fill = false))
+                                Text("  ·  ${formatTime(t.durationMs)}")
+                            }
+                        },
                         leadingIcon = { if (t.id == audio.current?.id) Icon(Icons.Outlined.Check, null) },
                         onClick = { menu = false; audio.select(t) },
                     )
@@ -376,7 +382,7 @@ private fun Markers(audio: AudioController, currentPage: Int) {
                     Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Bookmark, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(m.label, style = MaterialTheme.typography.labelLarge)
+                        TitleText(m.label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.widthIn(max = 220.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
                             formatTime(m.positionMs) + if (m.page >= 0) " · p${m.page + 1}" else "",

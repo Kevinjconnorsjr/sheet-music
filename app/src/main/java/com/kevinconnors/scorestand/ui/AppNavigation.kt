@@ -1,6 +1,11 @@
 package com.kevinconnors.scorestand.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kevinconnors.scorestand.ScoreStandApp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -13,6 +18,12 @@ import com.kevinconnors.scorestand.ui.setlist.SetlistScreen
 @Composable
 fun AppNavigation() {
     val nav = rememberNavController()
+    // Files shared from another app (e.g. Google Drive's "Send a copy") are imported in the library.
+    val app = LocalContext.current.applicationContext as ScoreStandApp
+    val incoming by app.incomingFiles.collectAsStateWithLifecycle()
+    LaunchedEffect(incoming) {
+        if (incoming != null && nav.currentDestination?.route != "library") nav.popBackStack("library", inclusive = false)
+    }
     NavHost(navController = nav, startDestination = "library") {
         composable("library") {
             LibraryScreen(

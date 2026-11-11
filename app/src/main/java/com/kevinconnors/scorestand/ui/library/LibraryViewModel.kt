@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -111,12 +112,17 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                     val summary = "Added \"${added.single().title}\" with ${tracks.size} track${if (tracks.size == 1) "" else "s"}"
                     messageChannel.send(if (all.isEmpty()) summary else "$summary. ${all.size} failed: ${all.first()}")
                 }
-                added.isEmpty() -> {
+                added.isEmpty() && errors.isNotEmpty() -> {
                     importing.value = false
-                    messageChannel.send(
-                        if (errors.isNotEmpty()) errors.first()
-                        else "Pick the sheet music together with its recordings, or use “Add audio tracks” on a score"
-                    )
+                    messageChannel.send(errors.first())
+                }
+                added.isEmpty() -> {
+                    // Recordings on their own: ask which score they go with, newest scores first
+                    // (e.g. the PDF that was shared a moment ago).
+                    importing.value = false
+                    val library = repo.scoreDao.observeAll().first().sortedByDescending { it.createdAt }
+                    if (library.isEmpty()) messageChannel.send("Add the sheet music first, then its recordings")
+                    else pendingTracks.value = library to audio
                 }
                 else -> {
                     importing.value = false
