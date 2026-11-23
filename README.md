@@ -69,6 +69,21 @@ and practise along with attached audio tracks.
 - Marks are stored separately from the PDF (the original file is never changed) and scale with
   the page in every layout. Half-page mode shows whole pages while you're marking up.
 
+**Listening playlists** (library → **Playlists**)
+- Gather learning tracks from any of your scores into playlists: **New playlist**, then
+  **Add tracks** (tick tracks score by score, or *All*). Also from a score's menu (*Add tracks to a
+  playlist…*) or the audio panel's track menu (*Add to a playlist…*). Reorder or remove tracks
+- **Play** or **Shuffle**; it **loops the whole playlist by default** (loop button: playlist →
+  this track → off). Keeps playing with the screen off, with a notification / lock-screen player
+  (previous, play/pause, next, loop, shuffle) and headset/Bluetooth buttons
+- **Now playing**: seek bar showing the A–B loop, ±5 s, **A–B repeat**, **speed** (pitch kept),
+  **pitch** (speed kept), **pan** and volume. Each track keeps its own settings, shared with the
+  score's audio panel
+- **Sleep timer** (as in FoldPlayer): 5 min – 2 h, a custom time, or the end of the track; fades
+  out over the last 20 s; *+5 min* to extend
+- A mini player at the bottom of the library and playlists; playing a score's recording pauses
+  the playlist (and vice versa)
+
 **MusicXML scores: transpose and play back**
 - Import `.musicxml`, `.mxl` or MusicXML `.xml` files (from MuseScore, Finale, Sibelius, Dorico,
   or a PDF converted with a music-recognition tool such as Audiveris). They're shown as live,

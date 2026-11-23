@@ -14,6 +14,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import com.kevinconnors.scorestand.data.TitleDisplay
 
+/** Asks (once) to show the playback notification; call before starting a playlist. */
+val LocalAskForNotifications = compositionLocalOf<() -> Unit> { {} }
+
 /** The user's choice for long names, provided at the top of the app. */
 val LocalTitleDisplay = compositionLocalOf { TitleDisplay.WRAP }
 

@@ -6,42 +6,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import java.io.File
 import kotlin.math.pow
 
 /**
- * ExoPlayer set up for practice: independent speed and pitch (via Media3's built-in Sonic
- * processor), left/right pan (via [PanAudioProcessor]) and volume. Must be used on the main thread.
+ * ExoPlayer set up for practice: independent speed and pitch, left/right pan and volume
+ * (see [buildPracticeExoPlayer]). Must be used on the main thread.
  */
 @OptIn(UnstableApi::class)
 class PracticePlayer(context: Context) {
     private val panProcessor = PanAudioProcessor()
 
-    private val renderers = object : DefaultRenderersFactory(context) {
-        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-            DefaultAudioSink.Builder(context)
-                .setAudioProcessors(arrayOf(panProcessor))
-                .build()
-    }
-
-    private val exo: ExoPlayer = ExoPlayer.Builder(context, renderers)
-        .setAudioAttributes(
-            AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
-            /* handleAudioFocus = */ true,
-        )
-        .setHandleAudioBecomingNoisy(true) // pause when headphones are unplugged
-        .build()
+    private val exo: ExoPlayer = buildPracticeExoPlayer(context, panProcessor)
 
     var isPlaying by mutableStateOf(false)
         private set

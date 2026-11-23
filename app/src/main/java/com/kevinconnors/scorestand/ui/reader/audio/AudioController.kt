@@ -56,6 +56,9 @@ class AudioController(app: Application, private val repo: ScoreRepository, priva
 
     /** Pages the reader should turn to (from markers reached during playback, or seeks). */
     val pageRequests = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+
+    /** Shows a short message to the user. */
+    fun say(message: String) { messages.tryEmit(message) }
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     private var tracksJob: Job? = null

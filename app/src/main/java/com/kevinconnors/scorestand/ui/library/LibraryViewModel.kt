@@ -199,5 +199,8 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Shows a short message at the bottom of the library. */
+    fun say(message: String) = viewModelScope.launch { messageChannel.send(message) }
+
     fun deleteSetlist(setlist: Setlist) = viewModelScope.launch { repo.setlistDao.delete(setlist.id) }
 }

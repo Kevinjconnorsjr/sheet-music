@@ -21,6 +21,7 @@ class ScoreRepository(private val context: Context, db: AppDatabase) {
     val setlistDao = db.setlistDao()
     val markupDao = db.markupDao()
     val audioDao = db.audioDao()
+    val listeningDao = db.listeningDao()
 
     private val scoresDir = File(context.filesDir, "scores").apply { mkdirs() }
     private val thumbsDir = File(context.filesDir, "thumbs").apply { mkdirs() }

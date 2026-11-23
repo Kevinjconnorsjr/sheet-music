@@ -23,6 +23,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.kevinconnors.scorestand.ScoreStandApp
+import com.kevinconnors.scorestand.ui.playlist.PickListeningPlaylistDialog
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.outlined.KeyboardTab
 import androidx.compose.material.icons.outlined.FiberManualRecord
 import androidx.compose.material3.LocalContentColor
@@ -130,6 +136,7 @@ fun AudioPanel(
 private fun TrackHeader(audio: AudioController, adjustOpen: Boolean, onToggleAdjust: () -> Unit, onAddTrack: () -> Unit, onClose: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<AudioTrack?>(null) }
+    var toPlaylist by remember { mutableStateOf<AudioTrack?>(null) }
     var deleting by remember { mutableStateOf<AudioTrack?>(null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f)) {
@@ -153,6 +160,7 @@ private fun TrackHeader(audio: AudioController, adjustOpen: Boolean, onToggleAdj
                 if (audio.tracks.isNotEmpty()) HorizontalDivider()
                 DropdownMenuItem(text = { Text("Add track…") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; onAddTrack() })
                 audio.current?.let { cur ->
+                    DropdownMenuItem(text = { Text("Add to a playlist…") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; toPlaylist = cur })
                     DropdownMenuItem(text = { Text("Rename track") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; renaming = cur })
                     DropdownMenuItem(text = { Text("Remove track") }, leadingIcon = { Icon(Icons.Outlined.Delete, null) }, onClick = { menu = false; deleting = cur })
                 }
@@ -171,6 +179,22 @@ private fun TrackHeader(audio: AudioController, adjustOpen: Boolean, onToggleAdj
     }
     renaming?.let { t ->
         TextInputDialog("Rename track", "Name", t.title, onDismiss = { renaming = null }) { audio.renameTrack(t, it); renaming = null }
+    }
+    toPlaylist?.let { t ->
+        // Listening playlists (library → Playlists) gather tracks from any score.
+        val dao = (LocalContext.current.applicationContext as ScoreStandApp).repository.listeningDao
+        val scope = rememberCoroutineScope()
+        var playlists by remember { mutableStateOf(emptyList<com.kevinconnors.scorestand.data.ListeningPlaylist>()) }
+        LaunchedEffect(t.id) { playlists = dao.playlists() }
+        PickListeningPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { toPlaylist = null },
+            onPick = { p -> scope.launch { dao.addTracks(p.id, listOf(t.id)) }; audio.say("Added to \"${p.name}\""); toPlaylist = null },
+            onNew = { name ->
+                scope.launch { val id = dao.insert(com.kevinconnors.scorestand.data.ListeningPlaylist(name = name.trim())); dao.addTracks(id, listOf(t.id)) }
+                audio.say("Created \"${name.trim()}\""); toPlaylist = null
+            },
+        )
     }
     deleting?.let { t ->
         ConfirmDialog("Remove \"${t.title}\"?", "The recording and its markers will be removed from this score.", "Remove",
