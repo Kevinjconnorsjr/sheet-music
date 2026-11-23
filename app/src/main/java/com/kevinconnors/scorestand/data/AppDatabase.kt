@@ -8,8 +8,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [Score::class, Setlist::class, SetlistEntry::class, MarkupLayer::class, Markup::class, AudioTrack::class, AudioMarker::class, PageLink::class],
-    version = 6,
+    entities = [Score::class, Setlist::class, SetlistEntry::class, MarkupLayer::class, Markup::class, AudioTrack::class, AudioMarker::class, PageLink::class, ListeningPlaylist::class, ListeningEntry::class],
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), // adds markup layers + markups
@@ -17,6 +17,7 @@ import androidx.room.TypeConverters
         AutoMigration(from = 3, to = 4), // adds page links + per-score metronome settings
         AutoMigration(from = 4, to = 5), // adds per-score "trim margins"
         AutoMigration(from = 5, to = 6), // adds MusicXML transposition
+        AutoMigration(from = 6, to = 7), // adds listening playlists
     ],
 )
 @TypeConverters(Converters::class)
@@ -25,6 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun setlistDao(): SetlistDao
     abstract fun markupDao(): MarkupDao
     abstract fun audioDao(): AudioDao
+    abstract fun listeningDao(): ListeningDao
 
     companion object {
         fun build(context: Context): AppDatabase =

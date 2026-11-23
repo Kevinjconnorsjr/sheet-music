@@ -12,6 +12,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kevinconnors.scorestand.ui.library.LibraryScreen
+import com.kevinconnors.scorestand.ui.playlist.ListeningPlaylistScreen
+import com.kevinconnors.scorestand.ui.playlist.NowPlayingScreen
 import com.kevinconnors.scorestand.ui.reader.ReaderScreen
 import com.kevinconnors.scorestand.ui.setlist.SetlistScreen
 
@@ -24,12 +26,30 @@ fun AppNavigation() {
     LaunchedEffect(incoming) {
         if (incoming != null && nav.currentDestination?.route != "library") nav.popBackStack("library", inclusive = false)
     }
+    // Tapping the notification / lock-screen player opens Now playing.
+    val nowPlayingRequest by app.nowPlayingRequest.collectAsStateWithLifecycle()
+    LaunchedEffect(nowPlayingRequest) {
+        if (nowPlayingRequest > 0 && nav.currentDestination?.route != "nowplaying") nav.navigate("nowplaying") { launchSingleTop = true }
+    }
+    val openNowPlaying = { nav.navigate("nowplaying") { launchSingleTop = true } }
     NavHost(navController = nav, startDestination = "library") {
         composable("library") {
             LibraryScreen(
                 onOpenScore = { nav.navigate("reader/$it") },
                 onOpenSetlist = { nav.navigate("setlist/$it") },
+                onOpenPlaylist = { nav.navigate("playlist/$it") },
+                onNowPlaying = openNowPlaying,
             )
+        }
+        composable("playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
+            ListeningPlaylistScreen(
+                playlistId = entry.arguments!!.getLong("id"),
+                onBack = { nav.popBackStack() },
+                onNowPlaying = openNowPlaying,
+            )
+        }
+        composable("nowplaying") {
+            NowPlayingScreen(onBack = { nav.popBackStack() })
         }
         composable(
             "setlist/{id}",

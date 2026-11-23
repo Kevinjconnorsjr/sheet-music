@@ -42,6 +42,10 @@ import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.ui.platform.LocalContext
 import com.kevinconnors.scorestand.ui.tools.TunerDialog
+import com.kevinconnors.scorestand.ui.playlist.ListeningPlaylistsTab
+import com.kevinconnors.scorestand.ui.playlist.ListeningViewModel
+import com.kevinconnors.scorestand.ui.playlist.MiniPlayer
+import com.kevinconnors.scorestand.ui.playlist.PickListeningPlaylistDialog
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -90,8 +94,15 @@ import com.kevinconnors.scorestand.ui.TextInputDialog
 fun LibraryScreen(
     onOpenScore: (Long) -> Unit,
     onOpenSetlist: (Long) -> Unit,
+    onOpenPlaylist: (Long) -> Unit,
+    onNowPlaying: () -> Unit,
     vm: LibraryViewModel = viewModel(),
+    listening: ListeningViewModel = viewModel(),
 ) {
+    val listeningPlaylists by listening.playlists.collectAsStateWithLifecycle()
+    val allTracks by listening.allTracks.collectAsStateWithLifecycle()
+    var showNewPlaylist by remember { mutableStateOf(false) }
+    var playlistFor by remember { mutableStateOf<Score?>(null) }
     val scores by vm.scores.collectAsStateWithLifecycle()
     val tags by vm.allTags.collectAsStateWithLifecycle()
     val setlists by vm.setlists.collectAsStateWithLifecycle()
@@ -213,6 +224,7 @@ fun LibraryScreen(
                 PrimaryTabRow(selectedTabIndex = tab) {
                     Tab(tab == 0, { tab = 0 }, text = { Text("Scores") }, icon = { Icon(Icons.Outlined.LibraryMusic, null) })
                     Tab(tab == 1, { tab = 1 }, text = { Text("Setlists") }, icon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null) })
+                    Tab(tab == 2, { tab = 2 }, text = { Text("Playlists") }, icon = { Icon(Icons.Outlined.GraphicEq, null) })
                 }
                 if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
@@ -234,15 +246,22 @@ fun LibraryScreen(
                     icon = { Icon(Icons.Outlined.UploadFile, null) },
                     text = { Text("Import") },
                 )
-            } else {
+            } else if (tab == 1) {
                 ExtendedFloatingActionButton(
                     onClick = { showNewSetlist = true },
                     icon = { Icon(Icons.Outlined.Add, null) },
                     text = { Text("New setlist") },
                 )
+            } else {
+                ExtendedFloatingActionButton(
+                    onClick = { showNewPlaylist = true },
+                    icon = { Icon(Icons.Outlined.Add, null) },
+                    text = { Text("New playlist") },
+                )
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = { MiniPlayer(onOpen = onNowPlaying) },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (tab == 0) {
@@ -254,14 +273,39 @@ fun LibraryScreen(
                     filtering = query.isNotBlank() || tagFilter != null,
                     onOpen = onOpenScore,
                     onAddTracks = launchTrackPicker,
+                    onAddToPlaylist = { playlistFor = it },
                 )
-            } else {
+            } else if (tab == 1) {
                 SetlistsTab(setlists, onOpenSetlist)
+            } else {
+                ListeningPlaylistsTab(listeningPlaylists, onOpenPlaylist)
             }
         }
     }
 
     if (showTuner) TunerDialog(onDismiss = { showTuner = false })
+    if (showNewPlaylist) {
+        TextInputDialog("New playlist", "Name", "", confirmLabel = "Create", onDismiss = { showNewPlaylist = false }) { name ->
+            showNewPlaylist = false
+            listening.create(name) { id -> onOpenPlaylist(id) }
+        }
+    }
+    playlistFor?.let { score ->
+        val trackIds = allTracks.filter { it.track.scoreId == score.id }.map { it.track.id }
+        if (trackIds.isEmpty()) {
+            LaunchedEffect(score.id) {
+                playlistFor = null
+                snackbar.showSnackbar("\"${score.title}\" has no audio tracks yet — use Add audio tracks first")
+            }
+        } else {
+            PickListeningPlaylistDialog(
+                playlists = listeningPlaylists.map { it.playlist },
+                onDismiss = { playlistFor = null },
+                onPick = { p -> listening.addTracks(p.id, trackIds); playlistFor = null; vm.say("Added ${trackIds.size} track${if (trackIds.size == 1) "" else "s"} to \"${p.name}\"") },
+                onNew = { name -> listening.create(name, trackIds); playlistFor = null; vm.say("Created \"$name\" with ${trackIds.size} track${if (trackIds.size == 1) "" else "s"}") },
+            )
+        }
+    }
     pendingTracks?.let { (scores, uris) ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { vm.pendingTracks.value = null },
@@ -309,6 +353,7 @@ private fun ScoresTab(
     filtering: Boolean,
     onOpen: (Long) -> Unit,
     onAddTracks: (Score) -> Unit,
+    onAddToPlaylist: (Score) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Score?>(null) }
     var deleting by remember { mutableStateOf<Score?>(null) }
@@ -353,6 +398,7 @@ private fun ScoresTab(
                         onAddToSetlist = { addingToSetlist = score },
                         onShare = { vm.exportPdf(score) },
                         onAddTracks = { onAddTracks(score) },
+                        onAddToPlaylist = { onAddToPlaylist(score) },
                     )
                 }
             }
@@ -399,6 +445,7 @@ private fun ScoreCard(
     onAddToSetlist: () -> Unit,
     onShare: () -> Unit,
     onAddTracks: () -> Unit,
+    onAddToPlaylist: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box {
@@ -415,6 +462,7 @@ private fun ScoreCard(
         DropdownMenu(menu, { menu = false }) {
             DropdownMenuItem(text = { Text("Edit details") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onEdit() })
             DropdownMenuItem(text = { Text("Add audio tracks…") }, leadingIcon = { Icon(Icons.Outlined.Headphones, null) }, onClick = { menu = false; onAddTracks() })
+            DropdownMenuItem(text = { Text("Add tracks to a playlist…") }, leadingIcon = { Icon(Icons.Outlined.GraphicEq, null) }, onClick = { menu = false; onAddToPlaylist() })
             DropdownMenuItem(text = { Text("Add to setlist") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) }, onClick = { menu = false; onAddToSetlist() })
             DropdownMenuItem(
                 text = { Text(if (score.isNotation()) "Share MIDI file" else "Share as PDF") },
